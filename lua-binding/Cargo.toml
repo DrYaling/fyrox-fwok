@@ -1,0 +1,15 @@
+[package]
+name = "lua-binding"
+version = "0.1.0"
+edition = "2021"
+[lib]
+name = "lua_binding"
+[features]
+default = ["lua54"]
+lua54 = ["mlua/lua54"]
+luajit = ["mlua/luajit"]
+[dependencies]
+mlua = { version = "0.12.1", features = ["vendored", "serialize"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+thiserror = "2"

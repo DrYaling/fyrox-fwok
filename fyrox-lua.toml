@@ -1,0 +1,5 @@
+script_root = "data/scripts"
+jit = false
+reload_mode = "Immediate"
+enabled = true
+binding_mode = "EditorReflection"

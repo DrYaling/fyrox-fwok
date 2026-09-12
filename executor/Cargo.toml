@@ -1,0 +1,11 @@
+[package]
+name = "fwok-executor"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+fyrox.workspace = true
+fwok-game = { path = "../game" }
+
+[features]
+default = []
+dylib = ["fyrox/dylib"]

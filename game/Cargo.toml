@@ -1,0 +1,16 @@
+[package]
+name = "fwok-game"
+version = "0.1.0"
+edition = "2021"
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+dylib-engine = ["fyrox/dylib"]
+
+[dependencies]
+fyrox.workspace = true
+lua-binding.workspace = true
+mlua.workspace = true
+winit = "0.30"

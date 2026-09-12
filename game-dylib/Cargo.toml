@@ -1,0 +1,15 @@
+[package]
+name = "game_dylib"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+fwok-game = { path = "../game", default-features = false }
+fyrox.workspace = true
+
+[features]
+default = []
+dylib-engine = ["fwok-game/dylib-engine"]
