@@ -1,11 +1,14 @@
 [package]
-name = "fwok-executor"
+name = "executor"
 version = "0.1.0"
 edition = "2021"
 [dependencies]
 fyrox.workspace = true
-fwok-game = { path = "../game" }
+lua-plugin = { workspace = true, default-features = false, features = ["lua54"] }
+fwok-game = { path = "../game", default-features = false }
 
 [features]
-default = []
+default = ["lua-editor"]
 dylib = ["fyrox/dylib"]
+lua-editor = ["fwok-game/lua-editor"]
+lua-package = ["fwok-game/lua-package"]

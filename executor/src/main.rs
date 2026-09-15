@@ -21,6 +21,10 @@ fn main() {
             graphics_server_constructor: Default::default(),
         },
     );
+    lua_plugin::register_fyrox_resources(
+        &executor.resource_manager,
+        &executor.serialization_context.script_constructors,
+    );
     #[cfg(feature = "dylib")]
     executor
         .add_dynamic_plugin("game_dylib.dll", true, true)

@@ -1,9 +1,9 @@
 [workspace]
-members = ["lua-binding", "game", "game-dylib", "executor"]
+members = ["lua-plugin", "lua-tool", "game", "game-dylib", "executor"]
 resolver = "2"
 [workspace.dependencies]
 fyrox = { path = "../Fyrox/fyrox", version = "2.0.0-rc.1" }
-lua-binding = { path = "lua-binding" }
+lua-plugin = { path = "lua-plugin", default-features = false }
 mlua = { version = "0.12.1", features = ["vendored", "lua54"] }
 [profile.dev.package."*"]
 opt-level = 3

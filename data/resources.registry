@@ -1,1 +1,9 @@
-{}
+{
+    "161a96ca-223d-4808-8f10-09222b59ab6e": "data/SimHei.ttf",
+    "268cf3e3-1eae-4152-9b9f-c32f692279ed": "data/scripts/modules/ui_shared.lua",
+    "a02841fd-e57b-4ad9-9069-80f950046e26": "data/scripts/modules/lua_import_test.lua",
+    "acd320ba-b762-4edc-bb8c-bbf5a181e207": "data/scene.rgs",
+    "c3383569-1c63-4534-bbfe-fe4042c8d233": "data/unnamed.ui",
+    "cbbc0844-2439-407f-bcc1-d1f865bca9e1": "data/scripts/ui_controller.lua",
+    "eeb72397-a7e5-41f9-8c4e-6646aa2fea25": "data/scripts/player.lua",
+}

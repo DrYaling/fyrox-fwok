@@ -1,343 +1,424 @@
-//! FWOK 平台跳跃示例：Rust 游戏状态 + Lua UI/交互脚本。
+//! FWOK 搬箱子示例：Rust 负责玩法，Lua 负责 HUD 与交互界面。
+#[macro_use]
+extern crate fyrox;
+pub mod gameplay;
+
+mod hub;
+
+use crate::gameplay::{GameState, InputState};
 use fyrox::{
-    core::{algebra::Vector2, pool::Handle, reflect::prelude::*, visitor::prelude::*},
+    core::{algebra::Vector3, pool::Handle, reflect::prelude::*, visitor::prelude::*, warn},
     event::{ElementState, Event, WindowEvent},
     graph::SceneGraph,
     gui::{
-        button::{Button, ButtonBuilder, ButtonMessage},
+        button::ButtonMessage,
         message::{MessageDirection, UiMessage},
-        text::{Text, TextBuilder, TextMessage},
-        text_box::{TextBox, TextBoxBuilder},
-        widget::{WidgetBuilder, WidgetMessage},
         UserInterface,
     },
-    plugin::{error::GameResult, Plugin, PluginContext},
+    keyboard::{KeyCode, PhysicalKey},
+    plugin::{
+        error::{enable_backtrace_capture, GameResult},
+        Plugin, PluginContext,
+    },
+    scene::{node::Node, Scene},
 };
-use lua_binding::{EventManager, LuaConfig, LuaGameApi, LuaRuntime};
-use mlua::Lua;
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+use lua_plugin::SceneCommand;
+use lua_plugin::{
+    register_fyrox_resources, Bridge, BridgeHandle, LuaConfig, LuaPluginHost, SceneRegistry,
+    UiRegistry,
 };
-use winit::keyboard::{KeyCode, PhysicalKey};
-#[derive(Default, Debug, PartialEq, Visit, Reflect)]
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
+
+#[derive(Default, Debug, Visit, Reflect)]
 #[reflect(type_uuid = "4b7e0f75-4f32-4c02-a58d-3ec89a3a7d11", non_cloneable)]
 pub struct Game {
+    scene: Handle<Scene>,
+    player_node: Handle<Node>,
+    box_nodes: Vec<Handle<Node>>,
+    state: GameState,
     #[visit(skip)]
     #[reflect(hidden)]
-    position: Vector2<f32>,
-    velocity: Vector2<f32>,
-    grounded: bool,
-    inventory: Vec<String>,
-    hud: Handle<Text>,
-    inventory_label: Handle<Text>,
-    chat_log: Handle<Text>,
-    chat_input: Handle<TextBox>,
-    inventory_button: Handle<Button>,
-    send_button: Handle<Button>,
+    ui_handle: Handle<UserInterface>,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    ui_registry: Option<UiRegistry>,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    scene_registry: Option<SceneRegistry>,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    ui_font: Option<fyrox::gui::font::FontResource>,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    startup_config: Option<LuaConfig>,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    scene_ready: bool,
     left: bool,
     right: bool,
-    jump: bool,
+    up: bool,
+    down: bool,
     #[visit(skip)]
     #[reflect(hidden)]
-    runtime: Option<LuaRuntime>,
+    lua_host: Option<LuaPluginHost>,
     #[visit(skip)]
     #[reflect(hidden)]
     bridge: BridgeHandle,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    lua_update_ticks: u64,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    ui_diagnostic_logged: bool,
 }
-#[derive(Default, Debug, PartialEq)]
-struct Bridge {
-    position: Vector2<f32>,
-    inventory: Vec<String>,
-    commands: Vec<Command>,
-}
-#[derive(Debug, Clone, PartialEq)]
-enum Command {
-    Text(String, String),
-    Show(String, bool),
-    Chat(String),
-}
-#[derive(Clone)]
-struct BridgeHandle(Arc<Mutex<Bridge>>);
-impl Default for BridgeHandle {
-    fn default() -> Self {
-        Self(Arc::new(Mutex::new(Bridge::default())))
+
+impl PartialEq for Game {
+    fn eq(&self, other: &Self) -> bool {
+        self.scene == other.scene
+            && self.player_node == other.player_node
+            && self.box_nodes == other.box_nodes
+            && self.state == other.state
+            && self.ui_handle == other.ui_handle
+            && self.left == other.left
+            && self.right == other.right
+            && self.up == other.up
+            && self.down == other.down
+            && self.scene_ready == other.scene_ready
     }
 }
-impl std::fmt::Debug for BridgeHandle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("BridgeHandle")
-    }
-}
-impl PartialEq for BridgeHandle {
-    fn eq(&self, o: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &o.0)
-    }
-}
-struct Api {
-    bridge: Arc<Mutex<Bridge>>,
-}
-impl LuaGameApi for Api {
-    fn register(&self, lua: &Lua, events: EventManager) -> mlua::Result<()> {
-        let game = lua.create_table()?;
-        let b = self.bridge.clone();
-        game.set(
-            "position",
-            lua.create_function(move |_, ()| {
-                let b = b.lock().unwrap();
-                Ok((b.position.x, b.position.y))
-            })?,
-        )?;
-        let b = self.bridge.clone();
-        game.set(
-            "add_item",
-            lua.create_function(move |_, i: String| {
-                b.lock().unwrap().inventory.push(i);
-                Ok(())
-            })?,
-        )?;
-        lua.globals().set("game", game)?;
-        let ui = lua.create_table()?;
-        let b = self.bridge.clone();
-        ui.set(
-            "set_text",
-            lua.create_function(move |_, (i, t): (String, String)| {
-                b.lock().unwrap().commands.push(Command::Text(i, t));
-                Ok(())
-            })?,
-        )?;
-        let b = self.bridge.clone();
-        ui.set(
-            "show",
-            lua.create_function(move |_, (i, v): (String, bool)| {
-                b.lock().unwrap().commands.push(Command::Show(i, v));
-                Ok(())
-            })?,
-        )?;
-        lua.globals().set("ui", ui)?;
-        let chat = lua.create_table()?;
-        let b = self.bridge.clone();
-        chat.set(
-            "append",
-            lua.create_function(move |_, t: String| {
-                b.lock().unwrap().commands.push(Command::Chat(t));
-                Ok(())
-            })?,
-        )?;
-        lua.globals().set("chat", chat)?;
-        let inv = lua.create_table()?;
-        let b = self.bridge.clone();
-        inv.set(
-            "items",
-            lua.create_function(move |l, ()| {
-                l.create_sequence_from(b.lock().unwrap().inventory.clone())
-            })?,
-        )?;
-        lua.globals().set("inventory", inv)?;
-        let e = events.clone();
-        lua.globals().set(
-            "events",
-            lua.create_table_from([(
-                String::from("emit"),
-                lua.create_function(move |_, (n, p): (String, String)| {
-                    e.emit(n, p);
-                    Ok(())
-                })?,
-            )])?,
-        )?;
-        Ok(())
-    }
-    fn register_reflection(&self, lua: &Lua, events: EventManager) -> mlua::Result<()> {
-        // 游戏只提供小型稳定反射适配器；编辑器不会生成完整 Fyrox 类型绑定。
-        self.register(lua, events)
-    }
-}
+
 impl Plugin for Game {
-    fn init(&mut self, _: Option<&str>, c: PluginContext) -> GameResult {
-        c.user_interfaces
-            .add(UserInterface::new(Vector2::new(1280.0, 720.0)));
-        let u = &mut c.user_interfaces.first_mut().build_ctx();
-        self.hud = TextBuilder::new(
-            WidgetBuilder::new()
-                .with_width(600.0)
-                .with_height(100.0)
-                .with_desired_position(Vector2::new(20.0, 20.0)),
-        )
-        .with_text("FWOK PLATFORMER")
-        .build(u);
-        self.inventory_label = TextBuilder::new(
-            WidgetBuilder::new()
-                .with_width(420.0)
-                .with_height(60.0)
-                .with_desired_position(Vector2::new(20.0, 130.0)),
-        )
-        .with_text("背包")
-        .build(u);
-        self.inventory_button = ButtonBuilder::new(
-            WidgetBuilder::new()
-                .with_width(180.0)
-                .with_height(36.0)
-                .with_desired_position(Vector2::new(20.0, 200.0)),
-        )
-        .with_text("切换背包")
-        .build(u);
-        self.chat_log = TextBuilder::new(
-            WidgetBuilder::new()
-                .with_width(520.0)
-                .with_height(180.0)
-                .with_desired_position(Vector2::new(680.0, 80.0)),
-        )
-        .with_text("聊天窗口")
-        .build(u);
-        self.chat_input = TextBoxBuilder::new(
-            WidgetBuilder::new()
-                .with_width(400.0)
-                .with_height(36.0)
-                .with_desired_position(Vector2::new(680.0, 280.0)),
-        )
-        .with_text("")
-        .build(u);
-        self.send_button = ButtonBuilder::new(
-            WidgetBuilder::new()
-                .with_width(100.0)
-                .with_height(36.0)
-                .with_desired_position(Vector2::new(1090.0, 280.0)),
-        )
-        .with_text("发送")
-        .build(u);
-        self.inventory = vec!["红宝石".into(), "小药水".into()];
-        self.bridge = BridgeHandle(Arc::new(Mutex::new(Bridge {
-            position: self.position,
-            inventory: self.inventory.clone(),
-            commands: vec![],
-        })));
-        let mut cfg = LuaConfig::default();
-        cfg.script_root = PathBuf::from("data/scripts");
-        self.runtime = Some(
-            LuaRuntime::new(
-                cfg,
-                Api {
-                    bridge: self.bridge.0.clone(),
-                },
-            )
-            .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?,
+    fn register(&self, context: fyrox::plugin::PluginRegistrationContext) -> GameResult {
+        warn!("Registering Game plugin.");
+        enable_backtrace_capture(true);
+        register_fyrox_resources(
+            context.resource_manager,
+            &context.serialization_context.script_constructors,
         );
-        self.runtime
-            .as_ref()
-            .unwrap()
-            .start()
-            .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+        context
+            .serialization_context
+            .script_constructors
+            .add::<hub::Hub>("Hub");
         Ok(())
     }
-    fn update(&mut self, c: &mut PluginContext) -> GameResult {
-        let dt = c.dt as f32;
-        self.velocity.x = if self.left {
-            -220.0
-        } else if self.right {
-            220.0
-        } else {
-            0.0
-        };
-        if self.jump && self.grounded {
-            self.velocity.y = 420.0;
-            self.grounded = false
+
+    fn init(&mut self, scene_path: Option<&str>, mut context: PluginContext) -> GameResult {
+        let path = scene_path.unwrap_or("data/scene.rgs").to_owned();
+        let mut config = LuaConfig::load("fyrox-lua.toml")
+            .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+        if config.script_root.as_os_str().is_empty() {
+            config.script_root = PathBuf::from("data/scripts");
         }
-        self.velocity.y -= 980.0 * dt;
-        self.position += self.velocity * dt;
-        if self.position.y <= 0.0 {
-            self.position.y = 0.0;
-            self.velocity.y = 0.0;
-            self.grounded = true
+        self.startup_config = Some(config);
+        context.load_ui("data/unnamed.ui", |result, game: &mut Game, ctx| {
+            let ui = result?.payload;
+            game.ui_handle = ctx.user_interfaces.add(ui);
+            game.ui_font = None;
+            game.ui_registry = Some(UiRegistry::default());
+            game.try_start_runtime(ctx)
+        });
+        context.load_scene(path, false, |result, game: &mut Game, ctx| {
+            game.initialize_scene(result?.payload, ctx)
+        });
+        Ok(())
+    }
+    fn update(&mut self, context: &mut PluginContext) -> GameResult {
+        let dt = context.dt;
+        if self.state.step(
+            InputState {
+                left: self.left,
+                right: self.right,
+                up: self.up,
+                down: self.down,
+            },
+            dt,
+        ) {
+            if let Some(host) = self.lua_host.as_mut() {
+                host.dispatch_event("box.goal_reached", "")
+                    .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+            }
         }
-        if let Ok(mut b) = self.bridge.0.lock() {
-            b.position = self.position;
-            self.inventory = b.inventory.clone();
-            for x in std::mem::take(&mut b.commands) {
-                match x {
-                    Command::Text(i, t) => {
-                        let h = match i.as_str() {
-                            "hud" => self.hud,
-                            "inventory_label" => self.inventory_label,
-                            "chat_log" => self.chat_log,
-                            _ => Handle::NONE,
-                        };
-                        if h != Handle::<Text>::NONE {
-                            c.user_interfaces.first().send(h, TextMessage::Text(t));
-                        }
+        self.sync_scene(context);
+
+        if !self.ui_diagnostic_logged && self.lua_update_ticks >= 5 {
+            if let Ok(ui) = context.user_interfaces.try_get(self.ui_handle) {
+                let mut node_count = 0usize;
+                let mut visible_nodes = 0usize;
+                let mut layout_nodes = 0usize;
+                for (_, node) in ui.pair_iter() {
+                    node_count += 1;
+                    if node.is_globally_visible() {
+                        visible_nodes += 1;
                     }
-                    Command::Show(i, v) => {
-                        if i == "inventory_label" {
-                            c.user_interfaces
-                                .first()
-                                .send(self.inventory_label, WidgetMessage::Visibility(v));
-                        }
+                    if node.visual_valid.get() {
+                        layout_nodes += 1;
                     }
-                    Command::Chat(t) => c
-                        .user_interfaces
-                        .first()
-                        .send(self.chat_log, TextMessage::Text(t)),
+                }
+                warn!(
+                    "[UI] diagnostic: nodes={}, visible={}, visual_valid={}, draw_commands={}, screen={:?}",
+                    node_count,
+                    visible_nodes,
+                    layout_nodes,
+                    ui.drawing_context.get_commands().len(),
+                    ui.screen_size()
+                );
+                for (index, command) in ui.drawing_context.get_commands().iter().enumerate() {
+                    warn!(
+                        "[UI] draw[{}]: bounds={:?}, clip={:?}, triangles={:?}, opacity={}",
+                        index,
+                        command.bounds,
+                        command.clip_bounds,
+                        command.triangles,
+                        command.opacity
+                    );
+                }
+                self.ui_diagnostic_logged = true;
+            }
+        }
+
+        if let Ok(mut bridge) = self.bridge.0.try_borrow_mut() {
+            if let (Some(registry), Ok(ui)) = (
+                self.ui_registry.as_mut(),
+                context.user_interfaces.try_get_mut(self.ui_handle),
+            ) {
+                registry.sync_text_values(ui, &mut bridge.ui_text);
+                let commands = std::mem::take(&mut bridge.commands);
+                for command in commands {
+                    registry.apply(ui, command);
                 }
             }
         }
-        if let Some(r) = &self.runtime {
-            r.dispatch_events()
+
+        if let Some(host) = self.lua_host.as_mut() {
+            host.update(dt)
                 .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
-            r.call_all("update", dt)
-                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+            self.lua_update_ticks += 1;
+            if self.lua_update_ticks == 1 || self.lua_update_ticks % 300 == 0 {
+                // warn!(
+                //     "[Lua] game update heartbeat: tick={}, instances={}",
+                //     self.lua_update_ticks,
+                //     runtime.script_count()
+                // );
+            }
         }
-        self.jump = false;
+        self.apply_scene_commands(context);
         Ok(())
     }
+
     fn on_ui_message(
         &mut self,
-        c: &mut PluginContext,
-        m: &UiMessage,
-        _: Handle<UserInterface>,
+        _context: &mut PluginContext,
+        message: &UiMessage,
+        ui_handle: Handle<UserInterface>,
     ) -> GameResult {
-        if m.direction() != MessageDirection::FromWidget {
+        if message.direction() != MessageDirection::FromWidget {
             return Ok(());
         }
-        if let Some(ButtonMessage::Click) = m.data() {
-            if m.destination() == self.inventory_button {
-                if let Some(r) = &self.runtime {
-                    r.events().emit("inventory.toggle", "")
-                }
-            } else if m.destination() == self.send_button {
-                if let Ok(t) = c.user_interfaces.first().try_get(self.chat_input) {
-                    if let Some(r) = &self.runtime {
-                        r.events().emit("chat.send", t.text())
-                    }
-                    c.user_interfaces
-                        .first()
-                        .send(self.chat_input, TextMessage::Text(String::new()));
+        if ui_handle != self.ui_handle {
+            return Ok(());
+        }
+        let Some(_registry) = self.ui_registry.as_ref() else {
+            return Ok(());
+        };
+        if let Some(ButtonMessage::Click) = message.data() {
+            let id = _registry.button_id(message.destination());
+            if let Some(id) = id {
+                warn!("[Lua] UI click routed: id={}", id);
+                if let Some(host) = self.lua_host.as_mut() {
+                    host.dispatch_ui_click(id)
+                        .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
                 }
             }
         }
         Ok(())
     }
-    fn on_deinit(&mut self, _: PluginContext) -> GameResult {
-        if let Some(r) = &self.runtime {
-            r.destroy()
-                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?
+
+    fn on_deinit(&mut self, _context: PluginContext) -> GameResult {
+        if let Some(host) = self.lua_host.as_mut() {
+            host.destroy()
+                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
         }
+        self.lua_host = None;
         Ok(())
     }
-    fn on_os_event(&mut self, e: &Event<()>, _: PluginContext) -> GameResult {
+
+    fn on_os_event(&mut self, event: &Event<()>, _context: PluginContext) -> GameResult {
         if let Event::WindowEvent {
-            event: WindowEvent::KeyboardInput { event: i, .. },
+            event: WindowEvent::KeyboardInput { event: input, .. },
             ..
-        } = e
+        } = event
         {
-            if let PhysicalKey::Code(k) = i.physical_key {
-                let p = i.state == ElementState::Pressed;
-                match k {
-                    KeyCode::KeyA | KeyCode::ArrowLeft => self.left = p,
-                    KeyCode::KeyD | KeyCode::ArrowRight => self.right = p,
-                    KeyCode::Space if p => self.jump = true,
+            if let PhysicalKey::Code(key) = input.physical_key {
+                let pressed = input.state == ElementState::Pressed;
+                match key {
+                    KeyCode::KeyA | KeyCode::ArrowLeft => self.left = pressed,
+                    KeyCode::KeyD | KeyCode::ArrowRight => self.right = pressed,
+                    KeyCode::KeyW | KeyCode::ArrowUp => self.up = pressed,
+                    KeyCode::KeyS | KeyCode::ArrowDown => self.down = pressed,
                     _ => {}
                 }
             }
         }
         Ok(())
+    }
+}
+
+impl Game {
+    fn initialize_scene(&mut self, scene: Scene, context: &mut PluginContext) -> GameResult {
+        self.scene = context.scenes.add(scene);
+        let loaded_scene = context
+            .scenes
+            .try_get(self.scene)
+            .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+        self.player_node = loaded_scene
+            .graph
+            .find_by_name_from_root("Player")
+            .map(|(handle, _)| handle)
+            .unwrap_or_default();
+        self.box_nodes = ["BoxA", "BoxB"]
+            .iter()
+            .filter_map(|name| {
+                loaded_scene
+                    .graph
+                    .find_by_name_from_root(name)
+                    .map(|(handle, _)| handle)
+            })
+            .collect();
+        self.scene_registry = Some(SceneRegistry::default());
+        self.state = GameState::level();
+        self.scene_ready = true;
+        self.try_start_runtime(context)
+    }
+
+    fn try_start_runtime(&mut self, context: &mut PluginContext) -> GameResult {
+        if !self.scene_ready
+            || !self.ui_handle.is_some()
+            || self.lua_host.is_some()
+            || self.startup_config.is_none()
+        {
+            return Ok(());
+        }
+        let config = self.startup_config.take().unwrap();
+        let ui = context
+            .user_interfaces
+            .try_get_mut(self.ui_handle)
+            .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+        let font = context
+            .resource_manager
+            .request::<fyrox::gui::font::Font>(&config.font_path);
+        warn!("Loading project UI font: {}", config.font_path.display());
+        ui.default_font = font.clone();
+        self.ui_font = Some(font);
+        let bridge = Rc::new(RefCell::new(Bridge {
+            ui_text: Default::default(),
+            commands: Vec::new(),
+            scene_commands: Vec::new(),
+        }));
+        self.bridge = BridgeHandle(bridge.clone());
+        if config.enabled {
+            warn!("[Lua] creating scene runtime");
+            let loaded_scene = context
+                .scenes
+                .try_get(self.scene)
+                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+            let mut host = LuaPluginHost::new(config);
+            let loaded = host
+                .start_scene(loaded_scene, std::path::Path::new("scene"))
+                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+            warn!("[Lua] scene components instantiated: {}", loaded);
+            warn!(
+                "[Lua] lifecycle start complete: instances={}",
+                host.runtime().map(|runtime| runtime.script_count()).unwrap_or(0)
+            );
+            self.bridge = host.bridge().clone();
+            self.lua_host = Some(host);
+        } else {
+            self.lua_host = None;
+        }
+        self.apply_scene_commands(context);
+        Ok(())
+    }
+
+    fn sync_scene(&self, context: &mut PluginContext) {
+        let Ok(scene) = context.scenes.try_get_mut(self.scene) else {
+            return;
+        };
+        if let Ok(player) = scene.graph.try_get_mut(self.player_node) {
+            player.local_transform_mut().set_position(Vector3::new(
+                self.state.player.x,
+                self.state.player.y,
+                0.0,
+            ));
+        }
+        for (handle, x) in self.box_nodes.iter().zip(&self.state.boxes) {
+            if let Ok(box_node) = scene.graph.try_get_mut(*handle) {
+                box_node
+                    .local_transform_mut()
+                    .set_position(Vector3::new(x.x, x.y, 0.0));
+            }
+        }
+    }
+
+    fn apply_scene_commands(&mut self, context: &mut PluginContext) {
+        let commands = self
+            .bridge
+            .0
+            .try_borrow_mut()
+            .ok()
+            .map(|mut bridge| std::mem::take(&mut bridge.scene_commands));
+        let Some(commands) = commands else { return };
+        let Ok(scene) = context.scenes.try_get_mut(self.scene) else {
+            return;
+        };
+        let Some(registry) = self.scene_registry.as_mut() else {
+            return;
+        };
+        for command in commands {
+            match command {
+                SceneCommand::Resolve(name) => {
+                    if registry.resolve(scene, &name).is_some() {
+                        warn!("[Lua] scene.find resolved existing node: {}", name);
+                    } else {
+                        warn!("[Lua] scene.find could not resolve existing node: {}", name);
+                    }
+                }
+                SceneCommand::SetPosition(name, x, y, z) => {
+                    if let Some(handle) = registry.resolve(scene, &name) {
+                        if let Ok(node) = scene.graph.try_get_mut(handle) {
+                            node.local_transform_mut()
+                                .set_position(Vector3::new(x, y, z));
+                        }
+                    }
+                }
+                SceneCommand::SetRotationZ(name, angle) => {
+                    if let Some(handle) = registry.resolve(scene, &name) {
+                        if let Ok(node) = scene.graph.try_get_mut(handle) {
+                            node.set_rotation_z(angle);
+                        }
+                    }
+                }
+                SceneCommand::SetRotationAngles(name, roll, pitch, yaw) => {
+                    if let Some(handle) = registry.resolve(scene, &name) {
+                        if let Ok(node) = scene.graph.try_get_mut(handle) {
+                            node.set_rotation_angles(roll, pitch, yaw);
+                        }
+                    }
+                }
+                SceneCommand::SetScale(name, x, y, z) => {
+                    if let Some(handle) = registry.resolve(scene, &name) {
+                        if let Ok(node) = scene.graph.try_get_mut(handle) {
+                            node.set_scale_xyz(x, y, z);
+                        }
+                    }
+                }
+                SceneCommand::SetEnabled(name, enabled) => {
+                    if let Some(handle) = registry.resolve(scene, &name) {
+                        if let Ok(node) = scene.graph.try_get_mut(handle) {
+                            node.set_enabled(enabled);
+                        }
+                    }
+                }
+            }
+        }
     }
 }

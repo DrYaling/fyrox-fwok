@@ -6,11 +6,12 @@ edition = "2021"
 crate-type = ["rlib", "cdylib"]
 
 [features]
-default = []
+default = ["lua-editor"]
 dylib-engine = ["fyrox/dylib"]
+lua-editor = ["lua-plugin/editor", "lua-plugin/package"]
+lua-package = ["lua-plugin/package"]
 
 [dependencies]
 fyrox.workspace = true
-lua-binding.workspace = true
+lua-plugin = { workspace = true, default-features = false, features = ["lua54"] }
 mlua.workspace = true
-winit = "0.30"

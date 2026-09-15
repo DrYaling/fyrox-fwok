@@ -1,8 +1,12 @@
 # Fyrox Lua 集成方案
 
+不同绑定模式的完整时序和实现原理请先阅读：[Lua 模式工作流程](lua-modes-workflow.md)。本文保留 API 约定、脚本格式和阶段计划。
+
+Lua 引擎 API 采用手写注册入口，详见 `Docs/lua-manual-bindings.md`；运行时不扫描 Lua 源码。
+
 ## 目标
 
-`lua-binding` 提供独立 Lua 运行时，不修改或重新编译 Fyrox Editor；`game` 继续作为 Rust 游戏库，通过 `LuaGameApi` 注册游戏对象与函数。脚本位于 `data/scripts`，新增或修改 `.lua` 文件只触发脚本层加载。
+`lua-binding` 提供独立 Lua 运行时，不修改或重新编译 Fyrox Editor；`game` 继续作为 Rust 游戏库，通过通用 `LuaGameApi` 注册引擎绑定。脚本唯一位于项目配置的 `data/scripts` 目录，新增或修改 `.lua` 文件只触发脚本层加载。
 
 ## 配置
 
@@ -10,6 +14,7 @@
 
 ```toml
 script_root = "data/scripts"
+font_path = "data/SimHei.ttf"
 jit = false
 reload_mode = "Immediate" # 或 "OnStop"
 enabled = true
@@ -18,7 +23,9 @@ binding_mode = "EditorReflection" # 编辑器默认；可改为 PackageFull
 
 ## 编辑器反射与发布绑定
 
-绑定分为两条路径：编辑器/Debug 默认使用 `EditorReflection`，也可在配置中切换为 `PackageFull`；Release/发布构建无论配置文件如何设置，都会强制使用 `PackageFull`。`EditorReflection` 仅注册 `reflection.call(object, method, ...)`，由实现 `LuaReflection` 的编辑器适配器通过 Fyrox 反射系统按名称解析；`PackageFull` 注册完整稳定 API，供发布包和独立运行器使用。
+绑定分为两条路径：编译了 `editor` feature 的编辑器默认使用 `EditorReflection`，也可在配置中切换为 `PackageFull`；未编译 `editor` feature 的发布构建无论配置文件如何设置，都会强制使用 `PackageFull`。`EditorReflection` 注册 `reflection.call`、`get_method`、`find_type`、字段/属性访问及其 tolua 兼容别名（如 `getmethod`），由实现 `LuaReflection` 的编辑器适配器通过 Fyrox 反射系统按名称解析；`PackageFull` 注册完整稳定 API，供发布包和独立运行器使用。
+
+反射 API 的调用体验接近 tolua，但 Rust 没有 CLR 的 `MethodInfo.Invoke`：类型和字段元数据可以来自 Fyrox `Reflect`，方法必须由宿主登记参数检查和调用 shim。未登记的方法不会因为名字存在而自动可调用；对象应以类型标识和 generational handle 传递，不能把 Rust 借用或裸指针存入 Lua。
 
 反射层应限制对象和方法白名单以及参数类型，禁止暴露任意文件系统、裸指针或完整 SceneGraph。
 
@@ -30,7 +37,7 @@ Editor 工具菜单应读写该文件，提供脚本根目录、JIT、重载时�
 
 ## 运行模型
 
-`LuaRuntime` 启动时扫描根目录。每个脚本必须返回 class table，必须包含 `new(class)` 构造函数和 `on_awake(self)`；缺少任意一项都会拒绝加载。实例按顺序调用 `on_awake`、`start`、`update(dt)`、`on_event(name,payload)`、`on_destroy`。文件监听器检测变更后，Immediate 立即替换 chunk，OnStop 延迟到运行停止时处理。
+`LuaRuntime` 启动时枚举根目录中的脚本文件，并扫描场景图中的 `LuaComponent`。每个脚本必须返回 class table，必须包含 `new(class, params)` 构造函数和 `on_awake(self)`；缺少任意一项都会拒绝加载。实例按顺序调用 `on_awake`、`start`、`update(dt)`、`on_event(name,payload)`、`on_destroy`。组件的 `source_override` 非空时优先于资源文件，便于直接在 Inspector 编辑和绑定。当前提供 `reload_script(path)` 单文件重载入口，自动文件监听和 `reload_mode` 调度仍在后续阶段。
 
 ## 固定脚本格式
 
@@ -53,7 +60,7 @@ Rust 使用 `EventManager::emit` 发布事件，运行时每帧 `drain` 并调�
 
 ## 当前 UI 示例
 
-`game` 示例创建了背包标签、背包切换按钮、聊天窗口、输入框和发送按钮。控件事件通过 `EventManager` 转换为 `inventory.toggle` 与 `chat.send`，由 `data/scripts/ui_controller.lua` 处理。Lua 可调用：
+`game` 示例中的控件通过通用 UI 注册器暴露名称。Lua 使用 `ui.component("name")` 惰性查找并缓存组件句柄，按钮事件由 userdata 回调处理；业务脚本不要求 Rust 为每个控件增加分支。Lua 可调用：
 
 ```lua
 ui.set_text("inventory_label", "背包：红宝石")

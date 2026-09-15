@@ -11,5 +11,7 @@ fwok-game = { path = "../game", default-features = false }
 fyrox.workspace = true
 
 [features]
-default = []
+default = ["lua-editor"]
 dylib-engine = ["fwok-game/dylib-engine"]
+lua-editor = ["fwok-game/lua-editor"]
+lua-package = ["fwok-game/lua-package"]

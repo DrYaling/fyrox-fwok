@@ -1235,6 +1235,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "executor"
+version = "0.1.0"
+dependencies = [
+ "fwok-game",
+ "fyrox",
+ "lua-plugin",
+]
+
+[[package]]
 name = "exr"
 version = "1.74.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1482,21 +1491,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "fwok-executor"
-version = "0.1.0"
-dependencies = [
- "fwok-game",
- "fyrox",
-]
-
-[[package]]
 name = "fwok-game"
 version = "0.1.0"
 dependencies = [
  "fyrox",
- "lua-binding",
+ "lua-plugin",
  "mlua",
- "winit",
 ]
 
 [[package]]
@@ -1561,6 +1561,7 @@ dependencies = [
  "parking_lot",
  "rand 0.8.8",
  "serde",
+ "smallvec",
  "strum",
  "strum_macros",
  "uuid",
@@ -1768,6 +1769,7 @@ dependencies = [
  "notify",
  "rust-fuzzy-search",
  "serde",
+ "smallvec",
  "strum",
  "strum_macros",
  "sysinfo",
@@ -2635,9 +2637,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "lua-binding"
+name = "lua-plugin"
 version = "0.1.0"
 dependencies = [
+ "fyrox",
+ "log",
  "mlua",
  "serde",
  "thiserror 2.0.20",
@@ -2651,6 +2655,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d400ffef0e3d4d29287092bdc5a276d0bf468b2c69709d5bab0d469312d9f947"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "lua-tool"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 2.0.119",
 ]
 
 [[package]]
