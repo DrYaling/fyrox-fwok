@@ -25,14 +25,14 @@ flowchart LR
 
 ## 2. 绑定分层
 
-| 层 | 文件 | 职责 | 不负责 |
-|---|---|---|---|
-| 手写运行时 userdata | `lua-plugin/src/game_api.rs` | `UiComponentRef`、`SceneNodeRef` 的实际 Lua 方法 | 业务判断、动态创建生产节点 |
-| 手写绑定目录 | `lua-plugin/src/bindings/manual.rs` | 高频 UI/3D 类型和方法的审计元数据 | 扫描 Rust 源码 |
-| Fyrox API 目录 | `lua-plugin/src/bindings/catalog.rs` | 记录尚未实现 wrapper 的公开类型 | 对 Lua 暴露假 API |
-| 自动生成目录 | `lua-plugin/src/bindings/generated.rs` | `lua-tool` 生成的类型、方法和 common profile 别名 | 未经批准的动态反射 |
-| 运行时装配 | `lua-plugin/src/runtime.rs` | 创建 VM、注册绑定、加载脚本、生命周期调度 | 游戏业务 |
-| 主线程宿主 | `lua-plugin/src/plugin.rs` | 线程归属、host 生命周期和通用事件转发 | 业务组件注册 |
+| 层                  | 文件                                     | 职责                                                 | 不负责                     |
+| ------------------- | ---------------------------------------- | ---------------------------------------------------- | -------------------------- |
+| 手写运行时 userdata | `lua-plugin/src/game_api.rs`           | `UiComponentRef`、`SceneNodeRef` 的实际 Lua 方法 | 业务判断、动态创建生产节点 |
+| 手写绑定目录        | `lua-plugin/src/bindings/manual.rs`    | 高频 UI/3D 类型和方法的审计元数据                    | 扫描 Rust 源码             |
+| Fyrox API 目录      | `lua-plugin/src/bindings/catalog.rs`   | 记录尚未实现 wrapper 的公开类型                      | 对 Lua 暴露假 API          |
+| 自动生成目录        | `lua-plugin/src/bindings/generated.rs` | `lua-tool` 生成的类型、方法和 common profile 别名  | 未经批准的动态反射         |
+| 运行时装配          | `lua-plugin/src/runtime.rs`            | 创建 VM、注册绑定、加载脚本、生命周期调度            | 游戏业务                   |
+| 主线程宿主          | `lua-plugin/src/plugin.rs`             | 线程归属、host 生命周期和通用事件转发                | 业务组件注册               |
 
 ### 2.1 当前常用手写组件
 

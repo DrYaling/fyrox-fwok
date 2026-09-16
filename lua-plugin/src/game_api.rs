@@ -1,7 +1,110 @@
-use mlua::{Lua, UserData, UserDataMethods};
+use crate::handles::HandleToken;
+use mlua::{FromLua, Lua, UserData, UserDataFields, UserDataMethods, Value};
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::rc::Rc;
+
+#[derive(Clone, Copy, Debug)]
+pub struct LuaVector2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LuaVector3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LuaVector4 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LuaColor {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+macro_rules! value_userdata {
+    ($name:ident, {$($field:ident),+}) => {
+        impl UserData for $name {
+            fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+                $(fields.add_field_method_get(stringify!($field), |_, this| Ok(this.$field));)+
+            }
+        }
+    };
+}
+
+value_userdata!(LuaVector2, { x, y });
+value_userdata!(LuaVector3, { x, y, z });
+value_userdata!(LuaVector4, { x, y, z, w });
+value_userdata!(LuaColor, { r, g, b, a });
+
+macro_rules! value_from_lua {
+    ($name:ident, $lua_name:literal, {$($field:ident),+}) => {
+        impl FromLua for $name {
+            fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
+                match value {
+                    Value::UserData(data) => Ok(*data.borrow::<Self>()?),
+                    Value::Table(table) => Ok(Self {
+                        $($field: table.get(stringify!($field))?),+
+                    }),
+                    _ => Err(mlua::Error::FromLuaConversionError {
+                        from: value.type_name(),
+                        to: $lua_name.to_owned(),
+                        message: Some(concat!("expected ", $lua_name, " userdata or field table").into()),
+                    }),
+                }
+            }
+        }
+    };
+}
+
+value_from_lua!(LuaVector2, "Vector2", { x, y });
+value_from_lua!(LuaVector3, "Vector3", { x, y, z });
+value_from_lua!(LuaVector4, "Vector4", { x, y, z, w });
+value_from_lua!(LuaColor, "Color", { r, g, b, a });
+
+/// Registers the value types generated bindings use for common engine arguments.
+#[inline]
+pub(crate) fn register_value_types(lua: &Lua) -> mlua::Result<()> {
+    let globals = lua.globals();
+    for (name, constructor) in [
+        (
+            "Vector2",
+            lua.create_function(|_, (x, y): (f32, f32)| Ok(LuaVector2 { x, y }))?,
+        ),
+        (
+            "Vector3",
+            lua.create_function(|_, (x, y, z): (f32, f32, f32)| Ok(LuaVector3 { x, y, z }))?,
+        ),
+        (
+            "Vector4",
+            lua.create_function(|_, (x, y, z, w): (f32, f32, f32, f32)| {
+                Ok(LuaVector4 { x, y, z, w })
+            })?,
+        ),
+        (
+            "Color",
+            lua.create_function(|_, (r, g, b, a): (f32, f32, f32, f32)| {
+                Ok(LuaColor { r, g, b, a })
+            })?,
+        ),
+    ] {
+        let table = lua.create_table()?;
+        table.set("new", constructor)?;
+        globals.set(name, table)?;
+    }
+    Ok(())
+}
 
 #[derive(Default, Debug)]
 pub struct Bridge {
@@ -12,12 +115,18 @@ pub struct Bridge {
 
 #[derive(Debug, Clone)]
 pub enum SceneCommand {
-    Resolve(String),
-    SetPosition(String, f32, f32, f32),
-    SetRotationZ(String, f32),
-    SetRotationAngles(String, f32, f32, f32),
-    SetScale(String, f32, f32, f32),
-    SetEnabled(String, bool),
+    Resolve(ScopedNodeName),
+    SetPosition(ScopedNodeName, f32, f32, f32),
+    SetRotationZ(ScopedNodeName, f32),
+    SetRotationAngles(ScopedNodeName, f32, f32, f32),
+    SetScale(ScopedNodeName, f32, f32, f32),
+    SetEnabled(ScopedNodeName, bool),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ScopedNodeName {
+    pub scope: Option<HandleToken>,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -38,6 +147,14 @@ pub enum UiCommand {
     SetWidth(String, f32),
     SetHeight(String, f32),
     SetPosition(String, f32, f32),
+    SetChecked(String, bool),
+    SetSelected(String, Option<usize>),
+    SetScroll(String, f32, f32),
+    SetProgress(String, f32),
+    SetPopupOpen(String, bool),
+    SetOpacity(String, f32),
+    SetGridRow(String, usize),
+    SetGridColumn(String, usize),
     Log(LuaLogLevel, String),
 }
 
@@ -92,29 +209,36 @@ fn borrow(b: &BridgeRef) -> mlua::Result<Ref<'_, Bridge>> {
 }
 
 #[derive(Clone)]
-struct UiComponentRef {
-    id: String,
+pub(crate) struct UiComponentRef {
+    pub(crate) id: String,
     bridge: BridgeRef,
+}
+
+#[inline]
+pub(crate) fn queue_ui_command(this: &UiComponentRef, command: UiCommand) -> mlua::Result<()> {
+    borrow_mut(&this.bridge)?.commands.push(command);
+    Ok(())
 }
 
 #[derive(Clone)]
 struct SceneNodeRef {
-    name: String,
+    target: ScopedNodeName,
     bridge: BridgeRef,
 }
 
 impl UserData for SceneNodeRef {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
-        m.add_method("set_position", |_, this, (x, y, z): (f32, f32, f32)| {
+        m.add_method("set_position", |lua, this, values: mlua::MultiValue| {
+            let LuaVector3 { x, y, z } = vector3_args(lua, values)?;
             borrow_mut(&this.bridge)?
                 .scene_commands
-                .push(SceneCommand::SetPosition(this.name.clone(), x, y, z));
+                .push(SceneCommand::SetPosition(this.target.clone(), x, y, z));
             Ok(())
         });
         m.add_method("set_rotation_z", |_, this, angle: f32| {
             borrow_mut(&this.bridge)?
                 .scene_commands
-                .push(SceneCommand::SetRotationZ(this.name.clone(), angle));
+                .push(SceneCommand::SetRotationZ(this.target.clone(), angle));
             Ok(())
         });
         m.add_method(
@@ -123,7 +247,7 @@ impl UserData for SceneNodeRef {
                 borrow_mut(&this.bridge)?
                     .scene_commands
                     .push(SceneCommand::SetRotationAngles(
-                        this.name.clone(),
+                        this.target.clone(),
                         roll,
                         pitch,
                         yaw,
@@ -131,19 +255,53 @@ impl UserData for SceneNodeRef {
                 Ok(())
             },
         );
-        m.add_method("set_scale", |_, this, (x, y, z): (f32, f32, f32)| {
+        m.add_method("set_scale", |lua, this, values: mlua::MultiValue| {
+            let LuaVector3 { x, y, z } = vector3_args(lua, values)?;
             borrow_mut(&this.bridge)?
                 .scene_commands
-                .push(SceneCommand::SetScale(this.name.clone(), x, y, z));
+                .push(SceneCommand::SetScale(this.target.clone(), x, y, z));
             Ok(())
         });
         m.add_method("set_enabled", |_, this, value: bool| {
             borrow_mut(&this.bridge)?
                 .scene_commands
-                .push(SceneCommand::SetEnabled(this.name.clone(), value));
+                .push(SceneCommand::SetEnabled(this.target.clone(), value));
             Ok(())
         });
     }
+}
+
+#[inline]
+fn vector3_args(lua: &Lua, values: mlua::MultiValue) -> mlua::Result<LuaVector3> {
+    if values.len() == 1 {
+        return LuaVector3::from_lua(values.front().cloned().unwrap_or(Value::Nil), lua);
+    }
+    if values.len() == 3 {
+        return Ok(LuaVector3 {
+            x: f32::from_lua(values[0].clone(), lua)?,
+            y: f32::from_lua(values[1].clone(), lua)?,
+            z: f32::from_lua(values[2].clone(), lua)?,
+        });
+    }
+    Err(mlua::Error::runtime(
+        "expected Vector3 or three numeric arguments",
+    ))
+}
+
+#[inline]
+fn vector2_args(lua: &Lua, values: mlua::MultiValue) -> mlua::Result<LuaVector2> {
+    if values.len() == 1 {
+        return LuaVector2::from_lua(values.front().cloned().unwrap_or(Value::Nil), lua);
+    }
+    if values.len() == 2 {
+        return Ok(LuaVector2 {
+            x: f32::from_lua(values[0].clone(), lua)?,
+            y: f32::from_lua(values[1].clone(), lua)?,
+        });
+    }
+    Err(mlua::Error::runtime(
+        "expected Vector2 or two numeric arguments",
+    ))
 }
 impl UserData for UiComponentRef {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
@@ -183,12 +341,14 @@ impl UserData for UiComponentRef {
                 .push(UiCommand::SetHeight(this.id.clone(), value));
             Ok(())
         });
-        m.add_method("set_position", |_, this, (x, y): (f32, f32)| {
+        m.add_method("set_position", |lua, this, values: mlua::MultiValue| {
+            let LuaVector2 { x, y } = vector2_args(lua, values)?;
             borrow_mut(&this.bridge)?
                 .commands
                 .push(UiCommand::SetPosition(this.id.clone(), x, y));
             Ok(())
         });
+        crate::bindings::register_generated_ui_methods(m);
         m.add_method("text", |_, this, ()| {
             Ok(borrow(&this.bridge)?
                 .ui_text
@@ -205,7 +365,15 @@ impl UserData for UiComponentRef {
                     table
                 }
             };
-            t.set(this.id.as_str(), callback)
+            let entry = lua.create_table()?;
+            entry.set("callback", callback)?;
+            if let Some(scope) = current_scene_scope(lua)? {
+                let scope_table = lua.create_table()?;
+                scope_table.set("index", scope.index)?;
+                scope_table.set("generation", scope.generation)?;
+                entry.set("scope", scope_table)?;
+            }
+            t.set(this.id.as_str(), entry)
         });
     }
 }
@@ -215,6 +383,7 @@ pub struct Api {
 }
 impl crate::LuaGameApi for Api {
     fn register(&self, lua: &Lua) -> mlua::Result<()> {
+        register_value_types(lua)?;
         let log = lua.create_table()?;
         for (name, level) in [
             ("info", LuaLogLevel::Info),
@@ -275,9 +444,13 @@ impl crate::LuaGameApi for Api {
         lua.globals().set("ui", ui)?;
         let scene = lua.create_table()?;
         let bridge = self.bridge.clone();
-        scene.set(
-            "find",
+        let make_find = |global: bool, lua: &Lua, bridge: BridgeRef| {
             lua.create_function(move |lua, name: String| {
+                let scope = if global {
+                    None
+                } else {
+                    current_scene_scope(lua)?
+                };
                 let cache: mlua::Table = match lua.globals().get("__fwok_scene_nodes") {
                     Ok(table) => table,
                     Err(_) => {
@@ -286,21 +459,50 @@ impl crate::LuaGameApi for Api {
                         table
                     }
                 };
-                if let Ok(existing) = cache.get::<mlua::AnyUserData>(name.as_str()) {
+                let key = format!("{}:{}", scope_key(scope), name);
+                if let Ok(existing) = cache.get::<mlua::AnyUserData>(key.as_str()) {
                     return Ok(existing);
                 }
                 let proxy = lua.create_userdata(SceneNodeRef {
-                    name: name.clone(),
+                    target: ScopedNodeName {
+                        scope,
+                        name: name.clone(),
+                    },
                     bridge: bridge.clone(),
                 })?;
                 borrow_mut(&bridge)?
                     .scene_commands
-                    .push(SceneCommand::Resolve(name.clone()));
-                cache.set(name, proxy.clone())?;
+                    .push(SceneCommand::Resolve(ScopedNodeName {
+                        scope,
+                        name: name.clone(),
+                    }));
+                cache.set(key, proxy.clone())?;
                 Ok(proxy)
-            })?,
-        )?;
+            })
+        };
+        scene.set("find", make_find(false, lua, bridge.clone())?)?;
+        scene.set("global_find", make_find(true, lua, bridge)?)?;
         lua.globals().set("scene", scene)?;
         Ok(())
+    }
+}
+
+#[inline]
+fn scope_key(scope: Option<HandleToken>) -> String {
+    match scope {
+        Some(token) => format!("{}:{}", token.index, token.generation),
+        None => "global".to_owned(),
+    }
+}
+
+#[inline]
+fn current_scene_scope(lua: &Lua) -> mlua::Result<Option<HandleToken>> {
+    let value: mlua::Value = lua.globals().get("__fwok_current_scene_scope")?;
+    match value {
+        mlua::Value::Table(table) => Ok(Some(HandleToken {
+            index: table.get("index")?,
+            generation: table.get("generation")?,
+        })),
+        _ => Ok(None),
     }
 }

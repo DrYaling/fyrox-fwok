@@ -10,6 +10,13 @@ use fyrox::{
     graph::SceneGraph,
     gui::{
         button::{Button, ButtonBuilder, ButtonContent, ButtonMessage},
+        check_box::{CheckBox, CheckBoxMessage},
+        dropdown_list::{DropdownList, DropdownListMessage},
+        image::Image,
+        popup::{Popup, PopupMessage},
+        progress_bar::{ProgressBar, ProgressBarMessage},
+        scroll_panel::{ScrollPanel, ScrollPanelMessage},
+        scroll_viewer::{ScrollViewer, ScrollViewerMessage},
         text::{Text, TextBuilder, TextMessage},
         text_box::{TextBox, TextBoxBuilder},
         widget::{WidgetBuilder, WidgetMessage},
@@ -23,6 +30,33 @@ pub enum UiComponent {
     Text(Handle<Text>),
     TextBox(Handle<TextBox>),
     Button(Handle<Button>),
+    CheckBox(Handle<CheckBox>),
+    DropdownList(Handle<DropdownList>),
+    ScrollPanel(Handle<ScrollPanel>),
+    ScrollViewer(Handle<ScrollViewer>),
+    ProgressBar(Handle<ProgressBar>),
+    Popup(Handle<Popup>),
+    Image(Handle<Image>),
+    Widget(Handle<UiNode>),
+}
+
+impl UiComponent {
+    #[inline]
+    fn handle(self) -> Handle<UiNode> {
+        match self {
+            Self::Text(handle) => handle.to_base(),
+            Self::TextBox(handle) => handle.to_base(),
+            Self::Button(handle) => handle.to_base(),
+            Self::CheckBox(handle) => handle.to_base(),
+            Self::DropdownList(handle) => handle.to_base(),
+            Self::ScrollPanel(handle) => handle.to_base(),
+            Self::ScrollViewer(handle) => handle.to_base(),
+            Self::ProgressBar(handle) => handle.to_base(),
+            Self::Popup(handle) => handle.to_base(),
+            Self::Image(handle) => handle.to_base(),
+            Self::Widget(handle) => handle,
+        }
+    }
 }
 
 #[derive(Default, Debug, PartialEq)]
@@ -83,8 +117,22 @@ impl UiRegistry {
             UiComponent::TextBox(handle.to_variant())
         } else if node.cast::<Button>().is_some() {
             UiComponent::Button(handle.to_variant())
+        } else if node.cast::<CheckBox>().is_some() {
+            UiComponent::CheckBox(handle.to_variant())
+        } else if node.cast::<DropdownList>().is_some() {
+            UiComponent::DropdownList(handle.to_variant())
+        } else if node.cast::<ScrollPanel>().is_some() {
+            UiComponent::ScrollPanel(handle.to_variant())
+        } else if node.cast::<ScrollViewer>().is_some() {
+            UiComponent::ScrollViewer(handle.to_variant())
+        } else if node.cast::<ProgressBar>().is_some() {
+            UiComponent::ProgressBar(handle.to_variant())
+        } else if node.cast::<Popup>().is_some() {
+            UiComponent::Popup(handle.to_variant())
+        } else if node.cast::<Image>().is_some() {
+            UiComponent::Image(handle.to_variant())
         } else {
-            return None;
+            UiComponent::Widget(handle)
         };
         self.cache(id.to_owned(), component);
         Some(component)
@@ -112,15 +160,7 @@ impl UiRegistry {
 
     /// Returns the stable identity of an existing UI node after resolving it once.
     pub fn token(&mut self, ui: &UserInterface, id: &str) -> Option<HandleToken> {
-        match self.resolve(ui, id)? {
-            UiComponent::Text(handle) => Some(HandleToken::from_handle(handle.to_base::<UiNode>())),
-            UiComponent::TextBox(handle) => {
-                Some(HandleToken::from_handle(handle.to_base::<UiNode>()))
-            }
-            UiComponent::Button(handle) => {
-                Some(HandleToken::from_handle(handle.to_base::<UiNode>()))
-            }
-        }
+        Some(HandleToken::from_handle(self.resolve(ui, id)?.handle()))
     }
     pub fn text_box_value(&self, ui: &UserInterface, id: &str) -> Option<String> {
         match self.get(id)? {
@@ -133,7 +173,7 @@ impl UiRegistry {
         match self.resolve(ui, id)? {
             UiComponent::Text(handle) => ui.try_get(handle).ok().map(Text::text),
             UiComponent::TextBox(handle) => ui.try_get(handle).ok().map(TextBox::text),
-            UiComponent::Button(_) => None,
+            _ => None,
         }
     }
 
@@ -143,6 +183,7 @@ impl UiRegistry {
                 UiComponent::Text(handle) => ui.try_get(*handle).ok().map(Text::text),
                 UiComponent::TextBox(handle) => ui.try_get(*handle).ok().map(TextBox::text),
                 UiComponent::Button(_) => None,
+                _ => None,
             };
             if let Some(value) = value {
                 values.insert(id.clone(), value);
@@ -184,53 +225,81 @@ impl UiRegistry {
                 _ => {}
             },
             UiCommand::SetVisible(id, visible) => match self.resolve(ui, &id) {
-                Some(UiComponent::Text(handle)) => {
-                    ui.send(handle, WidgetMessage::Visibility(visible))
-                }
-                Some(UiComponent::TextBox(handle)) => {
-                    ui.send(handle, WidgetMessage::Visibility(visible))
-                }
-                Some(UiComponent::Button(handle)) => {
-                    ui.send(handle, WidgetMessage::Visibility(visible))
-                }
+                Some(component) => ui.send(component.handle(), WidgetMessage::Visibility(visible)),
                 _ => {}
             },
             UiCommand::SetEnabled(id, enabled) => match self.resolve(ui, &id) {
-                Some(UiComponent::Text(handle)) => ui.send(handle, WidgetMessage::Enabled(enabled)),
-                Some(UiComponent::TextBox(handle)) => {
-                    ui.send(handle, WidgetMessage::Enabled(enabled))
-                }
-                Some(UiComponent::Button(handle)) => {
-                    ui.send(handle, WidgetMessage::Enabled(enabled))
-                }
+                Some(component) => ui.send(component.handle(), WidgetMessage::Enabled(enabled)),
                 _ => {}
             },
             UiCommand::SetWidth(id, width) => match self.resolve(ui, &id) {
-                Some(UiComponent::Text(handle)) => ui.send(handle, WidgetMessage::Width(width)),
-                Some(UiComponent::TextBox(handle)) => ui.send(handle, WidgetMessage::Width(width)),
-                Some(UiComponent::Button(handle)) => ui.send(handle, WidgetMessage::Width(width)),
+                Some(component) => ui.send(component.handle(), WidgetMessage::Width(width)),
                 _ => {}
             },
             UiCommand::SetHeight(id, height) => match self.resolve(ui, &id) {
-                Some(UiComponent::Text(handle)) => ui.send(handle, WidgetMessage::Height(height)),
-                Some(UiComponent::TextBox(handle)) => {
-                    ui.send(handle, WidgetMessage::Height(height))
-                }
-                Some(UiComponent::Button(handle)) => ui.send(handle, WidgetMessage::Height(height)),
+                Some(component) => ui.send(component.handle(), WidgetMessage::Height(height)),
                 _ => {}
             },
             UiCommand::SetPosition(id, x, y) => match self.resolve(ui, &id) {
-                Some(UiComponent::Text(handle)) => {
-                    ui.send(handle, WidgetMessage::DesiredPosition(Vector2::new(x, y)))
+                Some(component) => ui.send(
+                    component.handle(),
+                    WidgetMessage::DesiredPosition(Vector2::new(x, y)),
+                ),
+                _ => {}
+            },
+            UiCommand::SetChecked(id, value) => {
+                if let Some(UiComponent::CheckBox(handle)) = self.resolve(ui, &id) {
+                    ui.send(handle, CheckBoxMessage::Check(Some(value)));
                 }
-                Some(UiComponent::TextBox(handle)) => {
-                    ui.send(handle, WidgetMessage::DesiredPosition(Vector2::new(x, y)))
+            }
+            UiCommand::SetSelected(id, value) => {
+                if let Some(UiComponent::DropdownList(handle)) = self.resolve(ui, &id) {
+                    ui.send(handle, DropdownListMessage::Selection(value));
                 }
-                Some(UiComponent::Button(handle)) => {
-                    ui.send(handle, WidgetMessage::DesiredPosition(Vector2::new(x, y)))
+            }
+            UiCommand::SetScroll(id, x, y) => match self.resolve(ui, &id) {
+                Some(UiComponent::ScrollPanel(handle)) => {
+                    ui.send(handle, ScrollPanelMessage::HorizontalScroll(x));
+                    ui.send(handle, ScrollPanelMessage::VerticalScroll(y));
+                }
+                Some(UiComponent::ScrollViewer(handle)) => {
+                    ui.send(handle, ScrollViewerMessage::HorizontalScroll(x));
+                    ui.send(handle, ScrollViewerMessage::VerticalScroll(y));
                 }
                 _ => {}
             },
+            UiCommand::SetProgress(id, value) => {
+                if let Some(UiComponent::ProgressBar(handle)) = self.resolve(ui, &id) {
+                    ui.send(handle, ProgressBarMessage::Progress(value));
+                }
+            }
+            UiCommand::SetPopupOpen(id, open) => {
+                if let Some(UiComponent::Popup(handle)) = self.resolve(ui, &id) {
+                    ui.send(
+                        handle,
+                        if open {
+                            PopupMessage::Open
+                        } else {
+                            PopupMessage::Close
+                        },
+                    );
+                }
+            }
+            UiCommand::SetOpacity(id, value) => {
+                if let Some(component) = self.resolve(ui, &id) {
+                    ui.send(component.handle(), WidgetMessage::Opacity(Some(value)));
+                }
+            }
+            UiCommand::SetGridRow(id, value) => {
+                if let Some(component) = self.resolve(ui, &id) {
+                    ui.send(component.handle(), WidgetMessage::Row(value));
+                }
+            }
+            UiCommand::SetGridColumn(id, value) => {
+                if let Some(component) = self.resolve(ui, &id) {
+                    ui.send(component.handle(), WidgetMessage::Column(value));
+                }
+            }
             UiCommand::Log(level, message) => match level {
                 LuaLogLevel::Info => fyrox::core::log::Log::info(format!("[LuaScript] {message}")),
                 LuaLogLevel::Warn => fyrox::core::log::Log::warn(format!("[LuaScript] {message}")),

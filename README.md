@@ -1,17 +1,15 @@
-# FWOK Fyrox Platformer
+# FWOK
 
-这是一个不包含 Editor 工程的 Fyrox workspace 示例。`game` 是可热重载的游戏插件库，`executor` 是独立运行器；编辑器和 Project Manager 使用 `../Fyrox` 中已经编译的程序。
+Fyrox 2.0.0-rc.1 workspace，使用本地 `../Fyrox/fyrox` 和 mlua 0.12.1。包含 game、game-dylib、executor、lua-plugin、lua-tool。
 
-## 运行
+新版文档（2026-09-16，按当前源码审计）：
 
-```powershell
-cargo run -p executor
-```
+- [引擎、Lua 与脚本开发](Docs/development.md)
+- [架构审计与三方对比](Docs/audit-comparison.md)
+- [绑定插件优化技术方案](Docs/binding-roadmap.md)
+- [Fyrox 大范围绑定审计](Docs/fyrox-api-binding-audit.md)
+- [大范围绑定实施与评估方案](Docs/fyrox-binding-next-plan.md)
+- [AI 执行规格与任务拆分](Docs/ai-fyrox-binding-execution-spec.md)
 
-使用 Project Manager：先执行 `.\scripts\build-editor.ps1` 和 `.\scripts\run-project-manager.ps1 -Build`，在 Project Manager 中导入本目录根 `Cargo.toml`，勾选 Hot Reload 后运行。需要单独构建热重载库时执行 `.\scripts\build-game-hot-reload.ps1`。
-
-Lua 绑定模式、编辑器反射、发布完整绑定和热更时序见 [Docs/lua-modes-workflow.md](Docs/lua-modes-workflow.md)。
-
-发布构建使用 `.\scripts\build-package.ps1`，该脚本只启用 `lua-package`，不会把编辑器反射模块编译进发布程序。
-
-游戏内支持 A/D 或方向键移动、空格跳跃；HUD 展示角色位置和包含红宝石/小药水的背包示例。后续可在 `game/src/lib.rs` 接入真实 2D 场景、碰撞体和资源。
+运行：`rtk cargo run -p executor`。测试：`rtk cargo test -p lua-plugin -p lua-tool --lib --bins`。
+Lua 唯一业务脚本目录为 `data/scripts`。场景、UI、组件先在资源中配置，再由 Lua 查找和操作。

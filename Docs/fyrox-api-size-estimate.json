@@ -1,0 +1,111 @@
+{
+  "method": "lexical declaration estimate; includes cfg/test/comment/macro ambiguity; excludes dependency closure and reachability resolution",
+  "engine_head": "a41f929403760dcf08a382cf3c8be77deafcd047",
+  "selected_source_sha256": "b61d36cf98fc3d75404cdf96f1b7a9807b424137ca2d591acbd9355e591aa64e",
+  "crates": [
+    {
+      "crate": "fyrox",
+      "rs_files": 1,
+      "struct_declarations": 0,
+      "enum_declarations": 0,
+      "fn_declarations_including_methods": 0,
+      "named_field_like_lines": 0
+    },
+    {
+      "crate": "fyrox-impl",
+      "rs_files": 159,
+      "struct_declarations": 458,
+      "enum_declarations": 94,
+      "fn_declarations_including_methods": 2136,
+      "named_field_like_lines": 1025
+    },
+    {
+      "crate": "fyrox-core",
+      "rs_files": 46,
+      "struct_declarations": 74,
+      "enum_declarations": 21,
+      "fn_declarations_including_methods": 320,
+      "named_field_like_lines": 53
+    },
+    {
+      "crate": "fyrox-math",
+      "rs_files": 9,
+      "struct_declarations": 12,
+      "enum_declarations": 5,
+      "fn_declarations_including_methods": 167,
+      "named_field_like_lines": 24
+    },
+    {
+      "crate": "fyrox-graph",
+      "rs_files": 2,
+      "struct_declarations": 15,
+      "enum_declarations": 2,
+      "fn_declarations_including_methods": 28,
+      "named_field_like_lines": 11
+    },
+    {
+      "crate": "fyrox-ui",
+      "rs_files": 116,
+      "struct_declarations": 292,
+      "enum_declarations": 123,
+      "fn_declarations_including_methods": 1227,
+      "named_field_like_lines": 780
+    },
+    {
+      "crate": "fyrox-resource",
+      "rs_files": 14,
+      "struct_declarations": 31,
+      "enum_declarations": 6,
+      "fn_declarations_including_methods": 234,
+      "named_field_like_lines": 30
+    },
+    {
+      "crate": "fyrox-animation",
+      "rs_files": 19,
+      "struct_declarations": 39,
+      "enum_declarations": 15,
+      "fn_declarations_including_methods": 284,
+      "named_field_like_lines": 63
+    },
+    {
+      "crate": "fyrox-sound",
+      "rs_files": 19,
+      "struct_declarations": 27,
+      "enum_declarations": 10,
+      "fn_declarations_including_methods": 200,
+      "named_field_like_lines": 13
+    },
+    {
+      "crate": "fyrox-material",
+      "rs_files": 4,
+      "struct_declarations": 9,
+      "enum_declarations": 5,
+      "fn_declarations_including_methods": 39,
+      "named_field_like_lines": 14
+    },
+    {
+      "crate": "fyrox-texture",
+      "rs_files": 2,
+      "struct_declarations": 5,
+      "enum_declarations": 8,
+      "fn_declarations_including_methods": 66,
+      "named_field_like_lines": 2
+    },
+    {
+      "crate": "fyrox-graphics",
+      "rs_files": 13,
+      "struct_declarations": 28,
+      "enum_declarations": 33,
+      "fn_declarations_including_methods": 65,
+      "named_field_like_lines": 87
+    },
+    {
+      "crate": "fyrox-autotile",
+      "rs_files": 3,
+      "struct_declarations": 18,
+      "enum_declarations": 2,
+      "fn_declarations_including_methods": 55,
+      "named_field_like_lines": 9
+    }
+  ]
+}

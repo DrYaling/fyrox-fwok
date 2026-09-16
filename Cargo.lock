@@ -2661,6 +2661,7 @@ dependencies = [
 name = "lua-tool"
 version = "0.1.0"
 dependencies = [
+ "fyrox",
  "quote",
  "serde",
  "serde_json",

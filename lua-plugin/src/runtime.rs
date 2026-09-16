@@ -1,5 +1,6 @@
+use crate::handles::HandleToken;
 use crate::{
-    bindings::{register_engine_bindings, register_generated_component_aliases, BindingRegistry},
+    bindings::{register_engine_bindings, register_generated_component_aliases},
     config::{BindingMode, LuaConfig},
     resource::{EditorScript, LuaComponent},
     script_files::collect_lua_files,
@@ -28,7 +29,6 @@ pub struct LuaRuntime {
     pub lua: Lua,
     scripts: Vec<ScriptInstance>,
     config: LuaConfig,
-    bindings: BindingRegistry,
     update_ticks: u64,
     events_dispatched: u64,
     owner_thread: ThreadId,
@@ -43,6 +43,7 @@ struct ScriptInstance {
     update: Option<RegistryKey>,
     event: Option<RegistryKey>,
     destroy: Option<RegistryKey>,
+    scope: Option<HandleToken>,
 }
 impl std::fmt::Debug for LuaRuntime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -83,11 +84,10 @@ impl LuaRuntime {
             package.set("path", path)?;
         }
         // 引擎绑定只从手写注册入口装载；这里绝不扫描 Lua 源码。
-        let bindings = register_engine_bindings(&lua)?;
+        register_engine_bindings(&lua)?;
         lua_info!(
-            "[Lua] API registration complete (mode={:?}, catalog_bindings={})",
-            config.binding_mode,
-            bindings.len()
+            "[Lua] API registration complete (mode={:?}, executable bindings)",
+            config.binding_mode
         );
         api.register(&lua)?;
         register_generated_component_aliases(&lua)?;
@@ -95,7 +95,6 @@ impl LuaRuntime {
             lua,
             scripts: vec![],
             config,
-            bindings,
             update_ticks: 0,
             events_dispatched: 0,
             owner_thread: std::thread::current().id(),
@@ -119,11 +118,6 @@ impl LuaRuntime {
         &self.config
     }
 
-    /// 返回本 VM 已注册的静态引擎绑定，用于编辑器检查和调试面板。
-    pub fn bindings(&self) -> &BindingRegistry {
-        self.assert_owner_thread();
-        &self.bindings
-    }
     #[inline]
     fn assert_owner_thread(&self) {
         assert_eq!(
@@ -177,7 +171,13 @@ impl LuaRuntime {
         editor_script: &EditorScript,
     ) -> mlua::Result<()> {
         self.assert_owner_thread();
-        self.load_script_source_with_components(id, source, editor_script, &Default::default())
+        self.load_script_source_with_components(
+            id,
+            source,
+            editor_script,
+            &Default::default(),
+            None,
+        )
     }
 
     fn load_script_source_with_components(
@@ -186,6 +186,7 @@ impl LuaRuntime {
         source: &str,
         editor_script: &EditorScript,
         component_bindings: &crate::component::ComponentBindings,
+        scope: Option<HandleToken>,
     ) -> mlua::Result<()> {
         if !editor_script.enabled {
             return Ok(());
@@ -211,7 +212,7 @@ impl LuaRuntime {
         for (name, value) in editor_script.exported_parameters() {
             params.set(name, value)?;
         }
-        let instance: Table = ctor.call((class.clone(), params))?;
+        let instance: Table = self.with_scope(scope, || ctor.call((class.clone(), params)))?;
         let entry = ScriptInstance {
             path: id.to_path_buf(),
             awake: Self::method_key(&self.lua, &instance, "on_awake")?,
@@ -220,6 +221,7 @@ impl LuaRuntime {
             event: Self::method_key(&self.lua, &instance, "on_event")?,
             destroy: Self::method_key(&self.lua, &instance, "on_destroy")?,
             instance: self.lua.create_registry_value(instance)?,
+            scope,
         };
         self.call_no_arg(&entry, entry.awake.as_ref())?;
         lua_info!("[Lua] script instance ready: {}", id.display());
@@ -246,7 +248,7 @@ impl LuaRuntime {
     fn call_no_arg(&self, entry: &ScriptInstance, key: Option<&RegistryKey>) -> mlua::Result<()> {
         let Some(key) = key else { return Ok(()) };
         let (instance, function) = self.function(entry, key)?;
-        function.call::<()>((instance,))
+        self.with_scope(entry.scope, || function.call::<()>((instance,)))
     }
 
     fn call_dt(
@@ -257,7 +259,7 @@ impl LuaRuntime {
     ) -> mlua::Result<()> {
         let Some(key) = key else { return Ok(()) };
         let (instance, function) = self.function(entry, key)?;
-        function.call::<()>((instance, dt))
+        self.with_scope(entry.scope, || function.call::<()>((instance, dt)))
     }
 
     fn call_event(
@@ -269,7 +271,31 @@ impl LuaRuntime {
     ) -> mlua::Result<()> {
         let Some(key) = key else { return Ok(()) };
         let (instance, function) = self.function(entry, key)?;
-        function.call::<()>((instance, name, payload))
+        self.with_scope(entry.scope, || {
+            function.call::<()>((instance, name, payload))
+        })
+    }
+
+    #[inline]
+    fn with_scope<T>(
+        &self,
+        scope: Option<HandleToken>,
+        callback: impl FnOnce() -> mlua::Result<T>,
+    ) -> mlua::Result<T> {
+        let globals = self.lua.globals();
+        let previous: mlua::Value = globals.get("__fwok_current_scene_scope")?;
+        match scope {
+            Some(token) => {
+                let table = self.lua.create_table()?;
+                table.set("index", token.index)?;
+                table.set("generation", token.generation)?;
+                globals.set("__fwok_current_scene_scope", table)?;
+            }
+            None => globals.set("__fwok_current_scene_scope", mlua::Value::Nil)?,
+        }
+        let result = callback();
+        globals.set("__fwok_current_scene_scope", previous)?;
+        result
     }
 
     fn remove_instance_keys(&self, entry: ScriptInstance) -> mlua::Result<()> {
@@ -301,6 +327,7 @@ impl LuaRuntime {
                 &component.source_override,
                 &component.editor_script,
                 &component.components,
+                None,
             );
         }
         let resource = component.script.as_ref().ok_or_else(|| {
@@ -315,6 +342,7 @@ impl LuaRuntime {
             &script.source,
             &component.editor_script,
             &component.components,
+            None,
         )
     }
 
@@ -349,11 +377,51 @@ impl LuaRuntime {
                     node_handle.index(),
                     script_index
                 ));
-                self.load_component(component, &id)?;
+                self.load_component_with_scope(
+                    component,
+                    &id,
+                    Some(HandleToken::from_handle(node_handle)),
+                )?;
                 loaded += 1;
             }
         }
         Ok(loaded)
+    }
+
+    #[inline]
+    fn load_component_with_scope(
+        &mut self,
+        component: &LuaComponent,
+        id: &Path,
+        scope: Option<HandleToken>,
+    ) -> mlua::Result<()> {
+        self.assert_owner_thread();
+        if !component.enabled {
+            return Ok(());
+        }
+        if !component.source_override.trim().is_empty() {
+            return self.load_script_source_with_components(
+                id,
+                &component.source_override,
+                &component.editor_script,
+                &component.components,
+                scope,
+            );
+        }
+        let resource = component.script.as_ref().ok_or_else(|| {
+            mlua::Error::runtime("LuaComponent 未选择 LuaScript 资源，且 source_override 为空")
+        })?;
+        let data = resource.data_ref();
+        let script = data
+            .as_loaded_ref()
+            .ok_or_else(|| mlua::Error::runtime("LuaComponent 脚本资源尚未加载"))?;
+        self.load_script_source_with_components(
+            id,
+            &script.source,
+            &component.editor_script,
+            &component.components,
+            scope,
+        )
     }
 
     /// 返回当前 VM 中已实例化的脚本数量，供宿主状态面板和自检使用。
@@ -429,11 +497,89 @@ impl LuaRuntime {
             Ok(table) => table,
             Err(_) => return Ok(false),
         };
-        let callback: Function = match callbacks.get(id) {
-            Ok(callback) => callback,
+        let value: mlua::Value = match callbacks.get(id) {
+            Ok(value) => value,
             Err(_) => return Ok(false),
         };
-        callback.call::<()>(())?;
+        let (callback, scope) = match value {
+            mlua::Value::Function(callback) => (callback, None),
+            mlua::Value::Table(entry) => {
+                let callback: Function = entry
+                    .get("callback")
+                    .map_err(|_| mlua::Error::runtime("invalid Lua UI callback entry"))?;
+                let scope = match entry.get::<mlua::Value>("scope")? {
+                    mlua::Value::Table(table) => Some(HandleToken {
+                        index: table.get("index")?,
+                        generation: table.get("generation")?,
+                    }),
+                    _ => None,
+                };
+                (callback, scope)
+            }
+            _ => return Ok(false),
+        };
+        self.with_scope(scope, || callback.call::<()>(()))?;
         Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+    use crate::{
+        game_api::{Bridge, SceneCommand},
+        resource::{EditorScript, LuaComponent},
+        Api,
+    };
+    use fyrox::{
+        core::pool::Handle,
+        graph::SceneGraph,
+        scene::{base::BaseBuilder, node::Node, pivot::PivotBuilder, Scene},
+    };
+    use std::{cell::RefCell, rc::Rc};
+
+    #[test]
+    fn scene_component_find_uses_mount_scope() {
+        let mut scene = Scene::new();
+        let root: Handle<Node> = scene
+            .graph
+            .add_node(PivotBuilder::new(BaseBuilder::new().with_name("Mount")).build_node());
+        let child = scene
+            .graph
+            .add_node(PivotBuilder::new(BaseBuilder::new().with_name("Child")).build_node());
+        scene.graph.link_nodes(child, root);
+        scene.graph[root].add_script(LuaComponent {
+            script: None,
+            source_override: r#"local C={}; C.__index=C
+function C.new(class) scene.find("Child"); scene.global_find("Mount"); return setmetatable({}, class) end
+function C:on_awake() ui.find("button"):on_click(function() scene.find("Child") end) end
+return C"#
+                .into(),
+            enabled: true,
+            editor_script: EditorScript::default(),
+            components: Default::default(),
+        });
+        let bridge = Rc::new(RefCell::new(Bridge::default()));
+        let mut runtime = LuaRuntime::new_for_scene(
+            LuaConfig::default(),
+            Api {
+                bridge: bridge.clone(),
+            },
+        )
+        .unwrap();
+        runtime
+            .load_scene_components(&scene, Path::new("scope"))
+            .unwrap();
+        assert!(runtime.dispatch_ui_click("button").unwrap());
+        let commands = bridge.borrow();
+        assert!(commands.scene_commands.iter().any(|command| matches!(command,
+            SceneCommand::Resolve(target) if target.name == "Child" && target.scope == Some(HandleToken::from_handle(root))
+        )));
+        assert!(commands
+            .scene_commands
+            .iter()
+            .any(|command| matches!(command,
+                SceneCommand::Resolve(target) if target.name == "Mount" && target.scope.is_none()
+            )));
     }
 }

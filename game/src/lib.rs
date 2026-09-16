@@ -1,11 +1,4 @@
-//! FWOK 搬箱子示例：Rust 负责玩法，Lua 负责 HUD 与交互界面。
-#[macro_use]
-extern crate fyrox;
-pub mod gameplay;
-
-mod hub;
-
-use crate::gameplay::{GameState, InputState};
+//! FWOK runtime host. Gameplay and UI behavior are owned by Lua scripts.
 use fyrox::{
     core::{algebra::Vector3, pool::Handle, reflect::prelude::*, visitor::prelude::*, warn},
     event::{ElementState, Event, WindowEvent},
@@ -20,7 +13,7 @@ use fyrox::{
         error::{enable_backtrace_capture, GameResult},
         Plugin, PluginContext,
     },
-    scene::{node::Node, Scene},
+    scene::Scene,
 };
 use lua_plugin::SceneCommand;
 use lua_plugin::{
@@ -33,9 +26,6 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc};
 #[reflect(type_uuid = "4b7e0f75-4f32-4c02-a58d-3ec89a3a7d11", non_cloneable)]
 pub struct Game {
     scene: Handle<Scene>,
-    player_node: Handle<Node>,
-    box_nodes: Vec<Handle<Node>>,
-    state: GameState,
     #[visit(skip)]
     #[reflect(hidden)]
     ui_handle: Handle<UserInterface>,
@@ -54,10 +44,6 @@ pub struct Game {
     #[visit(skip)]
     #[reflect(hidden)]
     scene_ready: bool,
-    left: bool,
-    right: bool,
-    up: bool,
-    down: bool,
     #[visit(skip)]
     #[reflect(hidden)]
     lua_host: Option<LuaPluginHost>,
@@ -75,14 +61,7 @@ pub struct Game {
 impl PartialEq for Game {
     fn eq(&self, other: &Self) -> bool {
         self.scene == other.scene
-            && self.player_node == other.player_node
-            && self.box_nodes == other.box_nodes
-            && self.state == other.state
             && self.ui_handle == other.ui_handle
-            && self.left == other.left
-            && self.right == other.right
-            && self.up == other.up
-            && self.down == other.down
             && self.scene_ready == other.scene_ready
     }
 }
@@ -95,10 +74,6 @@ impl Plugin for Game {
             context.resource_manager,
             &context.serialization_context.script_constructors,
         );
-        context
-            .serialization_context
-            .script_constructors
-            .add::<hub::Hub>("Hub");
         Ok(())
     }
 
@@ -124,22 +99,6 @@ impl Plugin for Game {
     }
     fn update(&mut self, context: &mut PluginContext) -> GameResult {
         let dt = context.dt;
-        if self.state.step(
-            InputState {
-                left: self.left,
-                right: self.right,
-                up: self.up,
-                down: self.down,
-            },
-            dt,
-        ) {
-            if let Some(host) = self.lua_host.as_mut() {
-                host.dispatch_event("box.goal_reached", "")
-                    .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
-            }
-        }
-        self.sync_scene(context);
-
         if !self.ui_diagnostic_logged && self.lua_update_ticks >= 5 {
             if let Ok(ui) = context.user_interfaces.try_get(self.ui_handle) {
                 let mut node_count = 0usize;
@@ -243,21 +202,35 @@ impl Plugin for Game {
     }
 
     fn on_os_event(&mut self, event: &Event<()>, _context: PluginContext) -> GameResult {
-        if let Event::WindowEvent {
+        let Event::WindowEvent {
             event: WindowEvent::KeyboardInput { event: input, .. },
             ..
         } = event
-        {
-            if let PhysicalKey::Code(key) = input.physical_key {
-                let pressed = input.state == ElementState::Pressed;
-                match key {
-                    KeyCode::KeyA | KeyCode::ArrowLeft => self.left = pressed,
-                    KeyCode::KeyD | KeyCode::ArrowRight => self.right = pressed,
-                    KeyCode::KeyW | KeyCode::ArrowUp => self.up = pressed,
-                    KeyCode::KeyS | KeyCode::ArrowDown => self.down = pressed,
-                    _ => {}
-                }
-            }
+        else {
+            return Ok(());
+        };
+        let PhysicalKey::Code(key) = input.physical_key else {
+            return Ok(());
+        };
+        let key_name = match key {
+            KeyCode::KeyW => "W",
+            KeyCode::KeyA => "A",
+            KeyCode::KeyS => "S",
+            KeyCode::KeyD => "D",
+            KeyCode::ArrowUp => "Up",
+            KeyCode::ArrowLeft => "Left",
+            KeyCode::ArrowDown => "Down",
+            KeyCode::ArrowRight => "Right",
+            _ => return Ok(()),
+        };
+        if let Some(host) = self.lua_host.as_mut() {
+            let state = if input.state == ElementState::Pressed {
+                "pressed"
+            } else {
+                "released"
+            };
+            host.dispatch_event("input.key", &format!("{key_name}:{state}"))
+                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
         }
         Ok(())
     }
@@ -266,26 +239,7 @@ impl Plugin for Game {
 impl Game {
     fn initialize_scene(&mut self, scene: Scene, context: &mut PluginContext) -> GameResult {
         self.scene = context.scenes.add(scene);
-        let loaded_scene = context
-            .scenes
-            .try_get(self.scene)
-            .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
-        self.player_node = loaded_scene
-            .graph
-            .find_by_name_from_root("Player")
-            .map(|(handle, _)| handle)
-            .unwrap_or_default();
-        self.box_nodes = ["BoxA", "BoxB"]
-            .iter()
-            .filter_map(|name| {
-                loaded_scene
-                    .graph
-                    .find_by_name_from_root(name)
-                    .map(|(handle, _)| handle)
-            })
-            .collect();
         self.scene_registry = Some(SceneRegistry::default());
-        self.state = GameState::level();
         self.scene_ready = true;
         self.try_start_runtime(context)
     }
@@ -316,19 +270,17 @@ impl Game {
         }));
         self.bridge = BridgeHandle(bridge.clone());
         if config.enabled {
-            warn!("[Lua] creating scene runtime");
-            let loaded_scene = context
-                .scenes
-                .try_get(self.scene)
-                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+            warn!("[Lua] creating project script runtime");
             let mut host = LuaPluginHost::new(config);
             let loaded = host
-                .start_scene(loaded_scene, std::path::Path::new("scene"))
+                .start_root()
                 .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
-            warn!("[Lua] scene components instantiated: {}", loaded);
+            warn!("[Lua] root scripts instantiated: {}", loaded);
             warn!(
                 "[Lua] lifecycle start complete: instances={}",
-                host.runtime().map(|runtime| runtime.script_count()).unwrap_or(0)
+                host.runtime()
+                    .map(|runtime| runtime.script_count())
+                    .unwrap_or(0)
             );
             self.bridge = host.bridge().clone();
             self.lua_host = Some(host);
@@ -337,26 +289,6 @@ impl Game {
         }
         self.apply_scene_commands(context);
         Ok(())
-    }
-
-    fn sync_scene(&self, context: &mut PluginContext) {
-        let Ok(scene) = context.scenes.try_get_mut(self.scene) else {
-            return;
-        };
-        if let Ok(player) = scene.graph.try_get_mut(self.player_node) {
-            player.local_transform_mut().set_position(Vector3::new(
-                self.state.player.x,
-                self.state.player.y,
-                0.0,
-            ));
-        }
-        for (handle, x) in self.box_nodes.iter().zip(&self.state.boxes) {
-            if let Ok(box_node) = scene.graph.try_get_mut(*handle) {
-                box_node
-                    .local_transform_mut()
-                    .set_position(Vector3::new(x.x, x.y, 0.0));
-            }
-        }
     }
 
     fn apply_scene_commands(&mut self, context: &mut PluginContext) {
@@ -375,44 +307,77 @@ impl Game {
         };
         for command in commands {
             match command {
-                SceneCommand::Resolve(name) => {
-                    if registry.resolve(scene, &name).is_some() {
-                        warn!("[Lua] scene.find resolved existing node: {}", name);
+                SceneCommand::Resolve(target) => {
+                    if registry
+                        .resolve_scoped(
+                            scene,
+                            target.scope.map(|token| token.to_handle()),
+                            &target.name,
+                        )
+                        .is_some()
+                    {
+                        warn!(
+                            "[Lua] scene.find resolved existing node: scope={:?}, name={}",
+                            target.scope, target.name
+                        );
                     } else {
-                        warn!("[Lua] scene.find could not resolve existing node: {}", name);
+                        warn!(
+                            "[Lua] scene.find could not resolve existing node: scope={:?}, name={}",
+                            target.scope, target.name
+                        );
                     }
                 }
-                SceneCommand::SetPosition(name, x, y, z) => {
-                    if let Some(handle) = registry.resolve(scene, &name) {
+                SceneCommand::SetPosition(target, x, y, z) => {
+                    if let Some(handle) = registry.resolve_scoped(
+                        scene,
+                        target.scope.map(|token| token.to_handle()),
+                        &target.name,
+                    ) {
                         if let Ok(node) = scene.graph.try_get_mut(handle) {
                             node.local_transform_mut()
                                 .set_position(Vector3::new(x, y, z));
                         }
                     }
                 }
-                SceneCommand::SetRotationZ(name, angle) => {
-                    if let Some(handle) = registry.resolve(scene, &name) {
+                SceneCommand::SetRotationZ(target, angle) => {
+                    if let Some(handle) = registry.resolve_scoped(
+                        scene,
+                        target.scope.map(|token| token.to_handle()),
+                        &target.name,
+                    ) {
                         if let Ok(node) = scene.graph.try_get_mut(handle) {
                             node.set_rotation_z(angle);
                         }
                     }
                 }
-                SceneCommand::SetRotationAngles(name, roll, pitch, yaw) => {
-                    if let Some(handle) = registry.resolve(scene, &name) {
+                SceneCommand::SetRotationAngles(target, roll, pitch, yaw) => {
+                    if let Some(handle) = registry.resolve_scoped(
+                        scene,
+                        target.scope.map(|token| token.to_handle()),
+                        &target.name,
+                    ) {
                         if let Ok(node) = scene.graph.try_get_mut(handle) {
                             node.set_rotation_angles(roll, pitch, yaw);
                         }
                     }
                 }
-                SceneCommand::SetScale(name, x, y, z) => {
-                    if let Some(handle) = registry.resolve(scene, &name) {
+                SceneCommand::SetScale(target, x, y, z) => {
+                    if let Some(handle) = registry.resolve_scoped(
+                        scene,
+                        target.scope.map(|token| token.to_handle()),
+                        &target.name,
+                    ) {
                         if let Ok(node) = scene.graph.try_get_mut(handle) {
                             node.set_scale_xyz(x, y, z);
                         }
                     }
                 }
-                SceneCommand::SetEnabled(name, enabled) => {
-                    if let Some(handle) = registry.resolve(scene, &name) {
+                SceneCommand::SetEnabled(target, enabled) => {
+                    if let Some(handle) = registry.resolve_scoped(
+                        scene,
+                        target.scope.map(|token| token.to_handle()),
+                        &target.name,
+                    ) {
                         if let Ok(node) = scene.graph.try_get_mut(handle) {
                             node.set_enabled(enabled);
                         }

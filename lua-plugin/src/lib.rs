@@ -13,15 +13,12 @@ mod script_files;
 mod ui;
 
 pub use api::LuaGameApi;
-pub use bindings::{
-    register_engine_bindings, BindingCategory, BindingMethod, BindingRegistry, BindingStatus,
-    BindingType,
-};
+pub use bindings::register_engine_bindings;
 pub use component::{ComponentBinding, ComponentBindings, ComponentType};
 pub use config::{BindingMode, LuaConfig, ReloadMode};
 pub use game_api::{
-    Api, Bridge, BridgeHandle, BridgeRef, LuaLogLevel, SceneCommand, UiCommand, UiElementKind,
-    UiElementSpec,
+    Api, Bridge, BridgeHandle, BridgeRef, LuaLogLevel, SceneCommand, ScopedNodeName, UiCommand,
+    UiElementKind, UiElementSpec,
 };
 pub use handles::HandleToken;
 pub use plugin::LuaPluginHost;
@@ -38,7 +35,7 @@ pub use ui::UiRegistry;
 mod tests {
     use super::*;
     use fyrox::core::visitor::Visit;
-    use mlua::Lua;
+    use mlua::{Lua, ObjectLike};
 
     struct Api;
     impl LuaGameApi for Api {
@@ -148,16 +145,12 @@ return C"#,
     }
 
     #[test]
-    fn manual_engine_bindings_are_registered_without_script_analysis() {
+    fn engine_value_bindings_are_executable() {
         let lua = Lua::new();
-        let registry = register_engine_bindings(&lua).unwrap();
-        assert!(registry.len() > 20);
-        assert!(registry.implemented_len() >= 3);
-        assert_eq!(
-            registry.get("Vector3").unwrap().status,
-            BindingStatus::CatalogOnly
-        );
-        assert!(registry.by_category(BindingCategory::Ui).count() >= 4);
+        register_engine_bindings(&lua).unwrap();
+        lua.load("local v = Vector3.new(1, 2, 3); assert(v.x == 1 and v.y == 2 and v.z == 3)")
+            .exec()
+            .unwrap();
     }
 
     #[test]
@@ -354,16 +347,31 @@ return C"#
         assert!(ui.get::<mlua::Function>("text").is_ok());
         let scene: mlua::Table = runtime.lua.globals().get("scene").unwrap();
         assert!(scene.get::<mlua::Function>("node").is_ok());
+        let vectors: mlua::Table = runtime.lua.globals().get("Vector3").unwrap();
+        let vector: mlua::AnyUserData = vectors
+            .get::<mlua::Function>("new")
+            .unwrap()
+            .call((1.0_f32, 2.0_f32, 3.0_f32))
+            .unwrap();
+        assert_eq!(vector.get::<f32>("x").unwrap(), 1.0);
         runtime
             .lua
             .load(
                 r#"
-                local title = ui.find("title")
+                local title = ui.text("title")
                 title:set_text("hello")
                 title:set_enabled(true)
                 title:set_position(10, 20)
-                local box = scene.find("BoxB")
-                box:set_position(1, 2, 3)
+                ui.toggle("toggle"):set_checked(true)
+                ui.selector("selector"):set_selected(2)
+                ui.scroll_viewer("scroll"):set_scroll(3, 4)
+                ui.progress_bar("progress"):set_progress(0.75)
+                ui.popup("popup"):open()
+                ui.image("image"):set_opacity(0.5)
+                ui.grid("grid_child"):set_row(2)
+                local box = scene.node("BoxB")
+                local position = Vector3.new(1, 2, 3)
+                box:set_position(position)
                 box:set_rotation(0.1, 0.2, 0.3)
                 box:set_scale(2, 2, 2)
                 box:set_enabled(true)
@@ -385,11 +393,28 @@ return C"#
             |command| matches!(command, UiCommand::SetPosition(id, 10.0, 20.0) if id == "title")
         ));
         assert!(bridge
+            .commands
+            .iter()
+            .any(|command| matches!(command, UiCommand::SetChecked(id, true) if id == "toggle")));
+        assert!(bridge.commands.iter().any(
+            |command| matches!(command, UiCommand::SetSelected(id, Some(2)) if id == "selector")
+        ));
+        assert!(bridge.commands.iter().any(
+            |command| matches!(command, UiCommand::SetScroll(id, 3.0, 4.0) if id == "scroll")
+        ));
+        assert!(bridge.commands.iter().any(
+            |command| matches!(command, UiCommand::SetProgress(id, 0.75) if id == "progress")
+        ));
+        assert!(bridge
+            .commands
+            .iter()
+            .any(|command| matches!(command, UiCommand::SetPopupOpen(id, true) if id == "popup")));
+        assert!(bridge
             .scene_commands
             .iter()
-            .any(|command| matches!(command, SceneCommand::SetRotationAngles(id, 0.1, 0.2, 0.3) if id == "BoxB")));
+            .any(|command| matches!(command, SceneCommand::SetRotationAngles(target, 0.1, 0.2, 0.3) if target.name == "BoxB")));
         assert!(bridge.scene_commands.iter().any(
-            |command| matches!(command, SceneCommand::SetScale(id, 2.0, 2.0, 2.0) if id == "BoxB")
+            |command| matches!(command, SceneCommand::SetScale(target, 2.0, 2.0, 2.0) if target.name == "BoxB")
         ));
     }
 }

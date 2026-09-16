@@ -9,5 +9,17 @@ mlua = { version = "0.12.1", features = ["vendored", "lua54"] }
 opt-level = 3
 [profile.dev-hot-reload]
 inherits = "dev"
+incremental = true
+debug = 2
+codegen-units = 16
+lto = false
+
+# Debug HR only rebuilds the game DLL. Keep this profile link/codegen-light;
+# engine and Lua dependencies remain cached between launches.
+[profile.dev-hot-reload.package."fwok-game"]
+opt-level = 1
+
+[profile.dev-hot-reload.package."game_dylib"]
+opt-level = 1
 [profile.release-hot-reload]
 inherits = "release"
