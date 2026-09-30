@@ -9,7 +9,7 @@ use fyrox::{
 };
 fn main() {
     let mut window = WindowAttributes::default();
-    window.title = "FWOK Platformer".to_string();
+    window.title = "FWOK Game".to_string();
     window.inner_size = Some(LogicalSize::new(1280.0, 720.0).into());
     let mut executor = Executor::from_params(
         EventLoop::new().ok(),

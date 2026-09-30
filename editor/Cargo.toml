@@ -1,0 +1,11 @@
+[package]
+name = "editor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fyrox.workspace = true
+fyroxed_base.workspace = true
+fwok-game = { path = "../game", default-features = false }
+fyrox-mcp = { path = "../mcp/fyrox-mcp" }
+lua-plugin = { workspace = true, default-features = false, features = ["lua54"] }

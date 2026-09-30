@@ -3,3 +3,5 @@ $ErrorActionPreference = 'Stop'; $fyrox = (Resolve-Path (Join-Path $PSScriptRoot
 $env:RUSTFLAGS = '-C prefer-dynamic=yes'
 cargo build --manifest-path "$fyrox\Cargo.toml" -p fyroxed --release
 if ($LASTEXITCODE -ne 0) { throw 'Editor build failed.' }
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+& (Join-Path $PSScriptRoot 'build-mcp-bridge.ps1') -Profile release

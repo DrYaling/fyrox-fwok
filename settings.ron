@@ -93,44 +93,17 @@
                             ),
                         ],
                     ),
-                    (
-                        command: "cargo",
-                        args: [
-                            "build",
-                            "--package",
-                            "executor",
-                            "--no-default-features",
-                            "--features",
-                            "dylib,lua-editor",
-                            "--profile",
-                            "dev-hot-reload",
-                        ],
-                        environment_variables: [
-                            (
-                                name: "RUSTFLAGS",
-                                value: "-C prefer-dynamic=yes",
-                            ),
-                        ],
-                    ),
                 ],
                 run_command: (
-                    command: "cargo",
+                    command: "powershell.exe",
                     args: [
-                        "run",
-                        "--package",
-                        "executor",
-                        "--no-default-features",
-                        "--features",
-                        "dylib,lua-editor",
-                        "--profile",
-                        "dev-hot-reload",
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        "scripts/run-debug-hot-reload.ps1",
                     ],
-                    environment_variables: [
-                        (
-                            name: "RUSTFLAGS",
-                            value: "-C prefer-dynamic=yes",
-                        ),
-                    ],
+                    environment_variables: [],
                 ),
             ),
             (
@@ -171,8 +144,7 @@
                             "--features",
                             "dylib-engine,lua-editor",
                             "--profile",
-                            "dev-hot-reload",
-                            "--release",
+                            "release-hot-reload",
                         ],
                         environment_variables: [
                             (
@@ -191,8 +163,7 @@
                             "--features",
                             "dylib,lua-editor",
                             "--profile",
-                            "dev-hot-reload",
-                            "--release",
+                            "release-hot-reload",
                         ],
                         environment_variables: [
                             (
@@ -212,8 +183,7 @@
                         "--features",
                         "dylib,lua-editor",
                         "--profile",
-                        "dev-hot-reload",
-                        "--release",
+                        "release-hot-reload",
                     ],
                     environment_variables: [
                         (
@@ -237,8 +207,8 @@
     ),
     general: (
         show_node_removal_dialog: true,
-        suspend_unfocused_editor: true,
-        keep_editor_active: false,
+        suspend_unfocused_editor: false,
+        keep_editor_active: true,
         script_editor: SystemDefault,
         max_history_entries: 512,
         generate_previews: true,
@@ -555,6 +525,126 @@
         log_error: true,
     ),
     scene_settings: {
+        "data/rpg_level.rgs": (
+            camera_settings: (
+                position: (3.4743142, 8.13639, 2.3622317),
+                yaw: -1.8999875,
+                pitch: 0.9099996,
+                projection: Perspective((
+                    fov: 1.3089969,
+                    z_near: 0.025,
+                    z_far: 128.0,
+                )),
+            ),
+            node_infos: {
+                (
+                    index: 44,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 49,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 43,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 57,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 54,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 56,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 45,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 46,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 52,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 47,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 58,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+            },
+            recently_created_entities: [],
+        ),
+        "data/scene.rgs": (
+            camera_settings: (
+                position: (-5.175434, 1.0429658, 0.6993414),
+                yaw: 2.0599992,
+                pitch: 0.7592037,
+                projection: Perspective((
+                    fov: 1.3089969,
+                    z_near: 0.025,
+                    z_far: 128.0,
+                )),
+            ),
+            node_infos: {
+                (
+                    index: 1,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 5,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 0,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 11,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+            },
+            recently_created_entities: [],
+        ),
         "data/unnamed.ui": (
             camera_settings: (
                 position: (0.0, 1.0, 0.0),
@@ -568,31 +658,13 @@
             ),
             node_infos: {
                 (
-                    index: 58,
+                    index: 246,
                     generation: 1,
                 ): (
                     is_expanded: false,
                 ),
                 (
-                    index: 4,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 61,
-                    generation: 2,
-                ): (
-                    is_expanded: false,
-                ),
-                (
-                    index: 0,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 103,
+                    index: 57,
                     generation: 1,
                 ): (
                     is_expanded: true,
@@ -604,14 +676,86 @@
                     is_expanded: true,
                 ),
                 (
-                    index: 6,
+                    index: 96,
+                    generation: 2,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 252,
                     generation: 1,
                 ): (
                     is_expanded: true,
                 ),
                 (
-                    index: 96,
+                    index: 94,
                     generation: 2,
+                ): (
+                    is_expanded: false,
+                ),
+                (
+                    index: 80,
+                    generation: 2,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 247,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 258,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 5,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 249,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 18,
+                    generation: 2,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 9,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 276,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 280,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 254,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 270,
+                    generation: 1,
                 ): (
                     is_expanded: true,
                 ),
@@ -628,37 +772,43 @@
                     is_expanded: true,
                 ),
                 (
+                    index: 2,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 250,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 58,
+                    generation: 1,
+                ): (
+                    is_expanded: false,
+                ),
+                (
                     index: 19,
                     generation: 2,
                 ): (
                     is_expanded: true,
                 ),
                 (
-                    index: 94,
+                    index: 16,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 134,
                     generation: 2,
                 ): (
                     is_expanded: false,
                 ),
                 (
-                    index: 127,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 5,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 3,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 2,
+                    index: 10,
                     generation: 1,
                 ): (
                     is_expanded: true,
@@ -670,60 +820,19 @@
                     is_expanded: false,
                 ),
                 (
-                    index: 98,
-                    generation: 2,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 99,
-                    generation: 2,
-                ): (
-                    is_expanded: false,
-                ),
-                (
-                    index: 16,
+                    index: 103,
                     generation: 1,
                 ): (
                     is_expanded: true,
                 ),
                 (
-                    index: 18,
-                    generation: 2,
+                    index: 279,
+                    generation: 1,
                 ): (
                     is_expanded: true,
                 ),
-            },
-            recently_created_entities: [
-                "Text",
-            ],
-        ),
-        "data/scene.rgs": (
-            camera_settings: (
-                position: (0.0, 0.0, 0.0),
-                yaw: 3.0899997,
-                pitch: -1.27,
-                projection: Perspective((
-                    fov: 1.3089969,
-                    z_near: 0.025,
-                    z_far: 128.0,
-                )),
-            ),
-            node_infos: {
                 (
                     index: 11,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 5,
-                    generation: 1,
-                ): (
-                    is_expanded: true,
-                ),
-                (
-                    index: 1,
                     generation: 1,
                 ): (
                     is_expanded: true,
@@ -734,12 +843,136 @@
                 ): (
                     is_expanded: true,
                 ),
+                (
+                    index: 272,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 13,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 14,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 255,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 259,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 263,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 103,
+                    generation: 4,
+                ): (
+                    is_expanded: false,
+                ),
+                (
+                    index: 4,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 265,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 12,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 3,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 98,
+                    generation: 2,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 6,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 267,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 175,
+                    generation: 3,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 98,
+                    generation: 4,
+                ): (
+                    is_expanded: false,
+                ),
+                (
+                    index: 61,
+                    generation: 2,
+                ): (
+                    is_expanded: false,
+                ),
+                (
+                    index: 99,
+                    generation: 2,
+                ): (
+                    is_expanded: false,
+                ),
+                (
+                    index: 127,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
+                (
+                    index: 248,
+                    generation: 1,
+                ): (
+                    is_expanded: true,
+                ),
             },
-            recently_created_entities: [],
+            recently_created_entities: [
+                "Text",
+            ],
         ),
     },
     recent: (
         scenes: [
+            "data/mcp_camera_ui_test.ui",
+            "data/rpg_level.rgs",
             "data/scene.rgs",
             "data/unnamed.ui",
         ],

@@ -10,7 +10,7 @@ if ($editor -and -not $AllowEditorOpen) {
     throw "Fyrox Editor is running (PID $ids). Save/close it first, or rerun with -AllowEditorOpen."
 }
 
-rtk cargo run --manifest-path (Join-Path $repoRoot "lua-tool/Cargo.toml") --bin prepare_ui_demo
+rtk cargo run --manifest-path (Join-Path $repoRoot "lua/Cargo.toml") --bin prepare_ui_demo
 if ($LASTEXITCODE -ne 0) {
     throw "Lua UI demo resource preparation failed."
 }

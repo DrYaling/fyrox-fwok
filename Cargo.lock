@@ -1094,6 +1094,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "editor"
+version = "0.1.0"
+dependencies = [
+ "fwok-game",
+ "fyrox",
+ "fyrox-mcp",
+ "fyroxed_base",
+ "lua-plugin",
+]
+
+[[package]]
 name = "either"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1497,6 +1508,8 @@ dependencies = [
  "fyrox",
  "lua-plugin",
  "mlua",
+ "serde",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
@@ -1535,6 +1548,20 @@ dependencies = [
  "fxhash",
  "nalgebra 0.35.0",
  "rand 0.8.8",
+]
+
+[[package]]
+name = "fyrox-build-tools"
+version = "2.0.0-rc.1"
+dependencies = [
+ "cargo_metadata",
+ "clap",
+ "fyrox-core",
+ "fyrox-resource",
+ "fyrox-ui",
+ "open",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1709,6 +1736,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fyrox-mcp"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "fyrox",
+ "fyroxed_base",
+ "image",
+ "serde_json",
+]
+
+[[package]]
 name = "fyrox-resource"
 version = "2.0.0-rc.1"
 dependencies = [
@@ -1774,6 +1812,29 @@ dependencies = [
  "strum_macros",
  "sysinfo",
  "uuid",
+]
+
+[[package]]
+name = "fyroxed_base"
+version = "2.0.0-rc.1"
+dependencies = [
+ "bitflags 2.13.2",
+ "cargo_metadata",
+ "fyrox",
+ "fyrox-build-tools",
+ "image",
+ "imageproc",
+ "notify",
+ "open",
+ "opener",
+ "ron",
+ "rust-fuzzy-search",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "toml 0.9.12+spec-1.1.0",
+ "toml_edit 0.23.10+spec-1.0.0",
 ]
 
 [[package]]
@@ -2655,17 +2716,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d400ffef0e3d4d29287092bdc5a276d0bf468b2c69709d5bab0d469312d9f947"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "lua-tool"
-version = "0.1.0"
-dependencies = [
- "fyrox",
- "quote",
- "serde",
- "serde_json",
- "syn 2.0.119",
 ]
 
 [[package]]

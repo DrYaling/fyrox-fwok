@@ -1,0 +1,6 @@
+[submodule "lua"]
+	path = lua
+	url = ../fwok-lua.git
+[submodule "mcp"]
+	path = mcp
+	url = ../fwok-mcp.git

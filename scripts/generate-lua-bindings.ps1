@@ -1,7 +1,7 @@
 param(
-    [string]$InputPath = "lua-plugin/src",
+    [string]$InputPath = "lua/lua-plugin/src",
     [string]$OutputPath = "target/lua-bindings",
-    [string]$RuntimeOutput = "lua-plugin/src/bindings/generated.rs"
+    [string]$RuntimeOutput = "lua/lua-plugin/src/bindings/generated.rs"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +14,7 @@ $resolveRepoPath = {
 $inputResolved = & $resolveRepoPath $InputPath
 $outputResolved = & $resolveRepoPath $OutputPath
 $runtimeResolved = & $resolveRepoPath $RuntimeOutput
-rtk cargo run --bin lua-tool --manifest-path (Join-Path $repoRoot "lua-tool/Cargo.toml") -- `
+rtk cargo run --bin lua-tool --manifest-path (Join-Path $repoRoot "lua/Cargo.toml") -- `
     --input $inputResolved `
     --output $outputResolved `
     --runtime-output $runtimeResolved `
@@ -23,7 +23,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Offline Lua binding generation failed."
 }
 
-rtk cargo fmt --manifest-path (Join-Path $repoRoot "lua-plugin/Cargo.toml")
+rtk cargo fmt --manifest-path (Join-Path $repoRoot "lua/Cargo.toml")
 if ($LASTEXITCODE -ne 0) {
     throw "Generated binding formatting failed."
 }

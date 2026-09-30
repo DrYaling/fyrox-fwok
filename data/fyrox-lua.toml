@@ -1,0 +1,3 @@
+script_root = "data/scripts"
+enabled = true
+binding_mode = "EditorReflection"

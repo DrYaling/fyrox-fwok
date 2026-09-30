@@ -1,6 +1,0 @@
-script_root = "data/scripts"
-font_path = "data/SimHei.ttf"
-jit = false
-reload_mode = "Immediate"
-enabled = true
-binding_mode = "EditorReflection"

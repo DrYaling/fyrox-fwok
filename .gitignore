@@ -1,2 +1,7 @@
 /target
-**.log
+*.log
+/McpTemp
+/screenshot
+/tools
+data/editor/mcp-bridge.exe
+Docs/

@@ -1,15 +1,59 @@
 # FWOK
 
-Fyrox 2.0.0-rc.1 workspace，使用本地 `../Fyrox/fyrox` 和 mlua 0.12.1。包含 game、game-dylib、executor、lua-plugin、lua-tool。
+FWOK is a Fyrox game and editor project with an embedded Lua runtime and an MCP bridge. It contains root Rust crates plus independent lua/ and mcp/ Cargo workspaces.
 
-新版文档（2026-09-16，按当前源码审计）：
+[Chinese version](README.zh-CN.md)
 
-- [引擎、Lua 与脚本开发](Docs/development.md)
-- [架构审计与三方对比](Docs/audit-comparison.md)
-- [绑定插件优化技术方案](Docs/binding-roadmap.md)
-- [Fyrox 大范围绑定审计](Docs/fyrox-api-binding-audit.md)
-- [大范围绑定实施与评估方案](Docs/fyrox-binding-next-plan.md)
-- [AI 执行规格与任务拆分](Docs/ai-fyrox-binding-execution-spec.md)
+## Components
 
-运行：`rtk cargo run -p executor`。测试：`rtk cargo test -p lua-plugin -p lua-tool --lib --bins`。
-Lua 唯一业务脚本目录为 `data/scripts`。场景、UI、组件先在资源中配置，再由 Lua 查找和操作。
+- game and game-dylib: game plugin and hot-reload library.
+- executor: standalone game runner.
+- editor: FWOK editor with Lua bindings and MCP plugin.
+- lua/lua-plugin: Lua resources, runtime host, components, and scene/UI bindings.
+- lua/lua-tool: offline binding generator and UI demo tool.
+- mcp/mcp-bridge: MCP stdio server.
+- mcp/fyrox-mcp: Fyrox editor command plugin.
+- data/scripts: project Lua scripts.
+
+The workspaces resolve Fyrox from ../Fyrox and use mlua 0.12.1 with vendored Lua 5.4.
+
+## Requirements
+
+- Compatible Rust toolchain and Cargo.
+- Fyrox checkout at ../Fyrox.
+- Windows for the PowerShell scripts.
+
+## Build and run
+
+```powershell
+cargo run -p executor
+cargo build -p editor
+.\target\debug\editor.exe --project-directory .
+```
+
+Use `.\scripts\run-editor.ps1` for hot reload. The editor searches for `mcp-bridge.exe` in `data/editor`, `target/debug`, and `target/release`. Set `MCP_BRIDGE_BIN` to override the path. The bridge listens on `127.0.0.1:6501`.
+
+## Lua
+
+The game plugin reads `data/fyrox-lua.toml` and defaults to `data/scripts`. Lua scripts use registered `LuaComponent` and Lua resources.
+
+```powershell
+cargo run --manifest-path lua/Cargo.toml --bin lua-tool -- --help
+cargo run --manifest-path lua/Cargo.toml --bin prepare_ui_demo
+```
+
+## MCP
+
+`mcp-bridge` provides MCP JSON-RPC over stdio and forwards scene, node, camera, UI, asset, script, editor, log, screenshot, and batch operations to `McpEditorPlugin`.
+
+```powershell
+cargo build --manifest-path mcp/Cargo.toml -p mcp-bridge
+```
+
+## Tests
+
+```powershell
+cargo test --workspace
+cargo test --manifest-path lua/Cargo.toml --workspace
+cargo test --manifest-path mcp/Cargo.toml --workspace
+```

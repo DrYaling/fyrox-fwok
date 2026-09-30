@@ -1,9 +1,13 @@
 [workspace]
-members = ["lua-plugin", "lua-tool", "game", "game-dylib", "executor"]
+members = ["game", "game-dylib", "executor", "editor"]
+exclude = ["lua", "mcp"]
 resolver = "2"
 [workspace.dependencies]
 fyrox = { path = "../Fyrox/fyrox", version = "2.0.0-rc.1" }
-lua-plugin = { path = "lua-plugin", default-features = false }
+fyroxed_base = { path = "../Fyrox/editor", version = "2.0.0-rc.1" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+lua-plugin = { path = "lua/lua-plugin", default-features = false }
 mlua = { version = "0.12.1", features = ["vendored", "lua54"] }
 [profile.dev.package."*"]
 opt-level = 3

@@ -1,0 +1,3 @@
+# Empty values use Fyrox's built-in default font.
+editor_font = "data/SimHei.ttf"
+game_font = "data/SimHei.ttf"
