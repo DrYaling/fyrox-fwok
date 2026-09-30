@@ -19,12 +19,12 @@ FWOK 是一个基于 Fyrox 的游戏与编辑器工程，集成 Lua 脚本运行
 | `data/` | 项目资源、序列化场景/UI、运行时配置、字体和 Lua 脚本；项目脚本位于 `data/scripts/`。 |
 | `scripts/` | Windows PowerShell 构建、启动、MCP 部署和 Lua 工具脚本。 |
 
-`lua/` 和 `mcp/` 是 Git 子模块，也是独立 Cargo 工作区；根工作区不会把它们纳入成员。当前所有工作区都从同级目录 `../Fyrox` 解析 Fyrox 源码；根工作区使用带 vendored Lua 5.4 的 `mlua` 0.12.1。
+`lua/` 和 `mcp/` 是 Git 子模块，也是独立 Cargo 工作区；根工作区不会把它们纳入成员。当前所有工作区都从 `https://github.com/DrYaling/Fyrox.git` 的 `master` 分支解析 Fyrox 源码；根工作区使用带 vendored Lua 5.4 的 `mlua` 0.12.1。
 
 ## 环境要求
 
 - 与本工程兼容的 Rust 工具链和 Cargo。
-- 同级目录的 Fyrox 源码仓库 `../Fyrox`，其中包含 `fyrox/` 和 `editor/` crate。
+- 可访问 Fyrox Git 仓库的网络环境。
 - 提供的 PowerShell 启动和热重载脚本面向 Windows；各 Rust crate 可在其依赖支持的平台单独构建。
 
 ## 构建与运行

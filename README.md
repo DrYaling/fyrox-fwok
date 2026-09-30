@@ -15,12 +15,12 @@ FWOK is a Fyrox game and editor project with an embedded Lua runtime and an MCP 
 - mcp/fyrox-mcp: Fyrox editor command plugin.
 - data/scripts: project Lua scripts.
 
-The workspaces resolve Fyrox from ../Fyrox and use mlua 0.12.1 with vendored Lua 5.4.
+The workspaces resolve Fyrox from https://github.com/DrYaling/Fyrox.git (master) and use mlua 0.12.1 with vendored Lua 5.4.
 
 ## Requirements
 
 - Compatible Rust toolchain and Cargo.
-- Fyrox checkout at ../Fyrox.
+- Network access to the Fyrox Git repository.
 - Windows for the PowerShell scripts.
 
 ## Build and run

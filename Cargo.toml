@@ -3,8 +3,8 @@ members = ["game", "game-dylib", "executor", "editor"]
 exclude = ["lua", "mcp"]
 resolver = "2"
 [workspace.dependencies]
-fyrox = { path = "../Fyrox/fyrox", version = "2.0.0-rc.1" }
-fyroxed_base = { path = "../Fyrox/editor", version = "2.0.0-rc.1" }
+fyrox = { git = "https://github.com/DrYaling/Fyrox.git", branch = "master", version = "2.0.0-rc.1" }
+fyroxed_base = { git = "https://github.com/DrYaling/Fyrox.git", branch = "master", version = "2.0.0-rc.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 lua-plugin = { path = "lua/lua-plugin", default-features = false }
