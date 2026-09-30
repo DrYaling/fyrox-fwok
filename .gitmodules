@@ -1,6 +1,8 @@
 [submodule "lua"]
 	path = lua
 	url = https://github.com/DrYaling/fyrox-lua.git
+	branch = master
 [submodule "mcp"]
 	path = mcp
 	url = https://github.com/DrYaling/fyrox-mcp.git
+	branch = master
