@@ -21,7 +21,7 @@ The workspaces resolve Fyrox from https://github.com/DrYaling/Fyrox.git (master)
 
 - Compatible Rust toolchain and Cargo.
 - Network access to the Fyrox Git repository.
-- Windows for the PowerShell scripts.
+- Windows for the PowerShell scripts. The hot-reload scripts still use a sibling `../Fyrox` checkout for their shared target directory and `fyroxed` build.
 
 ## Build and run
 

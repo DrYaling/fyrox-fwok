@@ -25,7 +25,7 @@ FWOK 是一个基于 Fyrox 的游戏与编辑器工程，集成 Lua 脚本运行
 
 - 与本工程兼容的 Rust 工具链和 Cargo。
 - 可访问 Fyrox Git 仓库的网络环境。
-- 提供的 PowerShell 启动和热重载脚本面向 Windows；各 Rust crate 可在其依赖支持的平台单独构建。
+- 提供的 PowerShell 启动和热重载脚本面向 Windows；热重载脚本仍使用同级目录 `../Fyrox` 的共享产物目录并从该目录构建 `fyroxed`。各 Rust crate 可在其依赖支持的平台单独构建。
 
 ## 构建与运行
 
