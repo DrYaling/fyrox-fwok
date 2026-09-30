@@ -1,6 +1,6 @@
 [submodule "lua"]
 	path = lua
-	url = ../fwok-lua.git
+	url = https://github.com/DrYaling/fyrox-lua.git
 [submodule "mcp"]
 	path = mcp
-	url = ../fwok-mcp.git
+	url = https://github.com/DrYaling/fyrox-mcp.git
