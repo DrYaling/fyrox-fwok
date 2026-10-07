@@ -39,6 +39,15 @@
 - 每个公开类型/API 是否属于当前模块，是否存在无关方法或泄漏内部状态？
 - 模块之间是否通过稳定的类型/事件通信，而不是互相读取实现细节？
 - 新增逻辑是否有针对所属模块的测试或明确的验证命令？
+
+## Lua 与 MCP 边界（强制）
+
+- `lua-plugin` 只能实现与业务无关的 Lua VM 生命周期、通用 userdata、句柄查找、命令队列、消息和生命周期调度。禁止出现游戏状态、玩法规则、业务名称分支、业务 UI/场景创建或业务事件流程。
+- `lua-tool` 只能实现 Rust 扫描、元数据、配置校验、代码生成和通用资源合同审计。禁止读取或硬编码业务规则、业务节点清单、玩法状态或直接注册 Lua API；业务注册必须由 `lua-bindings.toml` 的 `targets.api.registrations` 声明并生成适配器。
+- `lua-plugin` 的引擎适配器只能通过 `targets.api.custom_bindings` 使用已命名的通用入口；不得把业务 context、业务类型或业务函数放入 `custom_bindings`。
+- MCP crate 只能提供通用 MCP/JSON-RPC、参数校验、传输、编辑器主线程队列、资源/场景通用读写和诊断。禁止包含 Lua 业务注册、玩法规则、业务状态机、业务名称分支或复制业务 UI 合同；业务合同由 `lua-bindings.toml` 生成并作为输入。
+- `data/editor/lua/lua-bindings.toml` 是业务 Lua 注册和资源合同的唯一声明来源；配置缺失不得通过 Rust 静默补注册、补节点或补业务逻辑来掩盖。
+- 相关改动必须运行 `rtk cargo run --manifest-path lua/Cargo.toml --bin lua-tool -- --config data/editor/lua/lua-bindings.toml`，并使用 `rg` 检查业务符号未进入 `lua-plugin` 或 MCP。
 # 资源优先规则
 
 除非需求明确要求动态生成，否则所有 UI、场景节点、组件和预制体必须先在 `.ui`、`.rgs` 或预制体资源中创建，再由 Lua 通过通用 `find`/组件接口获取并操作。Rust 绑定层只提供通用 userdata、句柄查找、消息和生命周期能力，不得按业务名称创建或处理中转 UI/Node 逻辑。Lua 业务脚本不得依赖 `create_*` 生成生产对象；新增 `require` 时必须提供跨模块调用和 Lua 内对象创建测试。

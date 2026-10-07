@@ -652,33 +652,7 @@ __ROOT__[]
 										CastShadows[Value<bool:true>Flags<u8:1>]{}
 										Enabled[Value<bool:true>Flags<u8:1>]{}
 										RenderMask[Value<u32:4294967295>Flags<u8:1>]{}
-										Scripts[Length<u32:1>]
-										{
-											Item0[TypeUuid<uuid:ed5aa1a8-9a7d-47b7-a3cb-a2f8f8fbcc0b>]
-											{
-												ScriptData[Initialized<bool:false>]
-												{
-													Data[SourceOverride<str:"">Enabled<bool:true>]
-													{
-														Script[IsSome<u8:1>]
-														{
-															Data[Uuid<uuid:eeb72397-a7e5-41f9-8c4e-6646aa2fea25>]{}
-														}
-														EditorScript[Enabled<bool:true>]
-														{
-															Parameters[Length<u32:1>]
-															{
-																Item0[Name<str:"speed">Value<str:"2.0">Exported<bool:true>]{}
-															}
-														}
-														Components[]
-														{
-															Entries[Length<u32:0>]{}
-														}
-													}
-												}
-											}
-										}
+										Scripts[Length<u32:0>]{}
 									}
 									Color[Flags<u8:1>]
 									{
@@ -907,30 +881,7 @@ __ROOT__[]
 									CastShadows[Value<bool:true>Flags<u8:1>]{}
 									Enabled[Value<bool:true>Flags<u8:1>]{}
 									RenderMask[Value<u32:4294967295>Flags<u8:1>]{}
-									Scripts[Length<u32:1>]
-									{
-										Item0[TypeUuid<uuid:ed5aa1a8-9a7d-47b7-a3cb-a2f8f8fbcc0b>]
-										{
-											ScriptData[Initialized<bool:false>]
-											{
-												Data[SourceOverride<str:"">Enabled<bool:true>]
-												{
-													Script[IsSome<u8:1>]
-													{
-														Data[Uuid<uuid:cbbc0844-2439-407f-bcc1-d1f865bca9e1>]{}
-													}
-													EditorScript[Enabled<bool:true>]
-													{
-														Parameters[Length<u32:0>]{}
-													}
-													Components[]
-													{
-														Entries[Length<u32:0>]{}
-													}
-												}
-											}
-										}
-									}
+									Scripts[Length<u32:0>]{}
 								}
 							}
 						}

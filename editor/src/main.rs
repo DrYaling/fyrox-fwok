@@ -5,44 +5,47 @@ mod lua_binding;
 use fyrox::event_loop::EventLoop;
 use fyrox_mcp::McpEditorPlugin;
 use fyroxed_base::{Editor, StartupData};
-use std::process::{Child, Command};
+use std::path::PathBuf;
 
-// Temporary integration: start the external MCP bridge from the editor.
-// This keeps the current two-process bridge while a proper launcher/configuration
-// flow is developed. Set MCP_BRIDGE_BIN to override the executable path.
-fn start_external_mcp() -> Option<Child> {
-    let candidates = std::env::var_os("MCP_BRIDGE_BIN")
-        .map(std::path::PathBuf::from)
-        .into_iter()
-        .chain([
-            std::path::PathBuf::from("data/editor/mcp-bridge.exe"),
-            std::path::PathBuf::from("target/debug/mcp-bridge.exe"),
-            std::path::PathBuf::from("target/release/mcp-bridge.exe"),
-        ]);
-    for path in candidates {
-        if !path.is_file() {
-            continue;
-        }
-        match Command::new(&path)
-            .current_dir(std::env::current_dir().ok()?)
-            .spawn()
-        {
-            Ok(child) => {
-                eprintln!("MCP bridge started: {}", path.display());
-                return Some(child);
-            }
-            Err(error) => eprintln!("MCP bridge start failed ({}): {error}", path.display()),
+fn project_root_from_args() -> PathBuf {
+    let mut args = std::env::args_os().skip(1);
+    while let Some(argument) = args.next() {
+        if argument == "--project-directory" {
+            return args
+                .next()
+                .map(PathBuf::from)
+                .expect("--project-directory requires a path");
         }
     }
-    eprintln!("MCP bridge executable not found; build mcp-bridge or set MCP_BRIDGE_BIN");
-    None
+
+    // Explorer may start an exe with an unrelated current directory. Prefer
+    // the adjacent packaged project so double-clicking release/editor.exe works.
+    if let Some(executable_directory) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(PathBuf::from))
+    {
+        if executable_directory.join("data").is_dir() {
+            return executable_directory;
+        }
+    }
+
+    std::env::current_dir().expect("Unable to determine project directory")
 }
 
 fn main() {
+    let project_root = project_root_from_args();
+    std::env::set_current_dir(&project_root).unwrap_or_else(|error| {
+        panic!(
+            "Unable to use project directory {}: {error}",
+            project_root.display()
+        )
+    });
+    if let Err(error) = lua_plugin::initialize_editor_lua(&project_root) {
+        eprintln!("[Lua] editor initialization failed: {error}");
+    }
     let event_loop = EventLoop::new().expect("Unable to create event loop");
-    let mut mcp_process = start_external_mcp();
     let mut editor = Editor::new(Some(StartupData {
-        working_directory: Default::default(),
+        working_directory: project_root,
         scenes: vec!["data/rpg_level.rgs".into()],
         named_objects: false,
     }));
@@ -57,9 +60,5 @@ fn main() {
         editor.run_headless();
     } else {
         editor.run(event_loop);
-    }
-    if let Some(mut child) = mcp_process.take() {
-        let _ = child.kill();
-        let _ = child.wait();
     }
 }

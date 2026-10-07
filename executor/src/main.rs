@@ -10,7 +10,18 @@ use fyrox::{
 fn main() {
     let mut window = WindowAttributes::default();
     window.title = "FWOK Game".to_string();
-    window.inner_size = Some(LogicalSize::new(1280.0, 720.0).into());
+    // Local verification can override the default size through the environment.
+    let width = std::env::var("FWOK_WINDOW_WIDTH")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value >= 64.0)
+        .unwrap_or(1280.0);
+    let height = std::env::var("FWOK_WINDOW_HEIGHT")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value >= 64.0)
+        .unwrap_or(720.0);
+    window.inner_size = Some(LogicalSize::new(width, height).into());
     let mut executor = Executor::from_params(
         EventLoop::new().ok(),
         GraphicsContextParams {

@@ -1,3 +1,6 @@
 script_root = "data/scripts"
 enabled = true
 binding_mode = "EditorReflection"
+error_policy = "disable_script"
+max_errors_per_script = 3
+max_script_bytes = 4194304

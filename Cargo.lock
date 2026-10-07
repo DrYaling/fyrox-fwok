@@ -1254,6 +1254,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "executor-android"
+version = "0.1.0"
+dependencies = [
+ "fwok-game",
+ "fyrox",
+ "lua-plugin",
+]
+
+[[package]]
+name = "executor-wasm"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "fwok-game",
+ "fyrox",
+ "lua-plugin",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "exr"
 version = "1.74.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1523,7 +1543,6 @@ dependencies = [
 [[package]]
 name = "fyrox"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fyrox-dylib",
  "fyrox-impl",
@@ -1532,7 +1551,6 @@ dependencies = [
 [[package]]
 name = "fyrox-animation"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fxhash",
  "fyrox-core",
@@ -1545,7 +1563,6 @@ dependencies = [
 [[package]]
 name = "fyrox-autotile"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fxhash",
  "nalgebra 0.35.0",
@@ -1555,7 +1572,6 @@ dependencies = [
 [[package]]
 name = "fyrox-build-tools"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "cargo_metadata",
  "clap",
@@ -1570,7 +1586,6 @@ dependencies = [
 [[package]]
 name = "fyrox-core"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "android-activity",
  "arrayvec",
@@ -1605,7 +1620,6 @@ dependencies = [
 [[package]]
 name = "fyrox-core-derive"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "convert_case",
  "darling",
@@ -1618,7 +1632,6 @@ dependencies = [
 [[package]]
 name = "fyrox-dylib"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fyrox-impl",
 ]
@@ -1626,7 +1639,6 @@ dependencies = [
 [[package]]
 name = "fyrox-graph"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fxhash",
  "fyrox-core",
@@ -1636,7 +1648,6 @@ dependencies = [
 [[package]]
 name = "fyrox-graphics"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "bytemuck",
  "fyrox-core",
@@ -1648,7 +1659,6 @@ dependencies = [
 [[package]]
 name = "fyrox-graphics-gl"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fxhash",
  "fyrox-core",
@@ -1666,7 +1676,6 @@ dependencies = [
 [[package]]
 name = "fyrox-impl"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "approx",
  "base64",
@@ -1719,7 +1728,6 @@ dependencies = [
 [[package]]
 name = "fyrox-material"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fxhash",
  "fyrox-core",
@@ -1737,7 +1745,6 @@ dependencies = [
 [[package]]
 name = "fyrox-math"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "arrayvec",
  "bytemuck",
@@ -1761,7 +1768,6 @@ dependencies = [
 [[package]]
 name = "fyrox-resource"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fxhash",
  "fyrox-core",
@@ -1774,7 +1780,6 @@ dependencies = [
 [[package]]
 name = "fyrox-sound"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "fyrox-core",
  "fyrox-resource",
@@ -1790,7 +1795,6 @@ dependencies = [
 [[package]]
 name = "fyrox-texture"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "ddsfile",
  "fast_image_resize",
@@ -1807,7 +1811,6 @@ dependencies = [
 [[package]]
 name = "fyrox-ui"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "bytemuck",
  "copypasta",
@@ -1820,7 +1823,6 @@ dependencies = [
  "fyrox-material",
  "fyrox-resource",
  "fyrox-texture",
- "markdown",
  "notify",
  "rust-fuzzy-search",
  "serde",
@@ -1834,7 +1836,6 @@ dependencies = [
 [[package]]
 name = "fyroxed_base"
 version = "2.0.0-rc.1"
-source = "git+https://github.com/DrYaling/Fyrox.git?branch=master#a8fec140f61dcd4642b4ebd1c47d4b986928a282"
 dependencies = [
  "bitflags 2.13.2",
  "cargo_metadata",
@@ -2747,15 +2748,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "markdown"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5cab8f2cadc416a82d2e783a1946388b31654d391d1c7d92cc1f03e295b1deb"
-dependencies = [
- "unicode-id",
-]
-
-[[package]]
 name = "matrixmultiply"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2839,9 +2831,9 @@ dependencies = [
 
 [[package]]
 name = "mlua"
-version = "0.12.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d96e5d00f19d8c46c71ceaced99593b90c31c57aa1fe2cb3e93a8b1698eedba9"
+checksum = "7a7ae6b65bf54b7fdd4cf5b6f44f60862350ebf3fe3779b3a9cc005e7fa14f81"
 dependencies = [
  "bstr",
  "either",
@@ -2857,9 +2849,9 @@ dependencies = [
 
 [[package]]
 name = "mlua-sys"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b806d7ade031f5d6607eae3e283fb034cb795a76247dd0d1ba753c8c42debccf"
+checksum = "1631cda17bd6486410ab751d91f5fd4484f441589278cdad879eb3afc721a285"
 dependencies = [
  "cc",
  "cfg-if",
@@ -5172,12 +5164,6 @@ dependencies = [
  "tempfile",
  "windows-sys 0.61.2",
 ]
-
-[[package]]
-name = "unicode-id"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65dd75ab2d9d379dbe86d4059e91d8b5a6e7054865eaba1ddbfc7a817ff96392"
 
 [[package]]
 name = "unicode-ident"

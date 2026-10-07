@@ -1,7 +1,5 @@
 param(
-    [string]$InputPath = "lua/lua-plugin/src",
-    [string]$OutputPath = "target/lua-bindings",
-    [string]$RuntimeOutput = "lua/lua-plugin/src/bindings/generated.rs"
+    [string]$ConfigPath = "data/editor/lua/lua-bindings.toml"
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,21 +9,19 @@ $resolveRepoPath = {
     if ([IO.Path]::IsPathRooted($PathValue)) { return $PathValue }
     return (Join-Path $repoRoot $PathValue)
 }
-$inputResolved = & $resolveRepoPath $InputPath
-$outputResolved = & $resolveRepoPath $OutputPath
-$runtimeResolved = & $resolveRepoPath $RuntimeOutput
+$configResolved = & $resolveRepoPath $ConfigPath
+if (-not (Test-Path -LiteralPath $configResolved)) {
+    throw "Business Lua binding config was not found: $configResolved. Start the Editor once to materialize the embedded default template, or create the project config manually."
+}
 rtk cargo run --bin lua-tool --manifest-path (Join-Path $repoRoot "lua/Cargo.toml") -- `
-    --input $inputResolved `
-    --output $outputResolved `
-    --runtime-output $runtimeResolved `
-    --profile common
+    --config $configResolved
 if ($LASTEXITCODE -ne 0) {
     throw "Offline Lua binding generation failed."
 }
 
-rtk cargo fmt --manifest-path (Join-Path $repoRoot "lua/Cargo.toml")
+rtk cargo fmt --manifest-path (Join-Path $repoRoot "lua/Cargo.toml") --all
 if ($LASTEXITCODE -ne 0) {
     throw "Generated binding formatting failed."
 }
 
-Write-Host "Lua bindings generated: $outputResolved"
+Write-Host "Business Lua bindings generated from: $configResolved"

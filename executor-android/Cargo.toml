@@ -1,0 +1,28 @@
+[package]
+name = "executor-android"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.android]
+# The Android exporter copies the project's data directory here before cargo-apk
+# packages it into the APK.  Keeping this path in the manifest makes the process
+# reproducible for both the Fyrox editor exporter and the command-line script.
+assets = "assets"
+strip = "strip"
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 30
+max_sdk_version = 35
+
+[package.metadata.android.signing.release]
+path = "release.keystore"
+keystore_password = "fyrox-template"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+fyrox.workspace = true
+fwok-game = { path = "../game", default-features = false, features = ["lua-package"] }
+lua-plugin = { workspace = true, default-features = false, features = ["lua54"] }

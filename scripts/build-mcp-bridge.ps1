@@ -1,9 +1,16 @@
-param([ValidateSet('debug','release')][string]$Profile = 'debug')
+param(
+    [ValidateSet('debug','release')][string]$Profile = 'debug',
+    [string]$DestinationDirectory = ''
+)
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $targetProfile = if ($Profile -eq 'release') { 'release' } else { 'debug' }
 $source = Join-Path $projectRoot "target\$targetProfile\mcp-bridge.exe"
-$destinationDir = Join-Path $projectRoot 'data\editor'
+$destinationDir = if ([string]::IsNullOrWhiteSpace($DestinationDirectory)) {
+    Join-Path $projectRoot 'data\editor'
+} else {
+    [System.IO.Path]::GetFullPath($DestinationDirectory)
+}
 $destination = Join-Path $destinationDir 'mcp-bridge.exe'
 
 Push-Location $projectRoot

@@ -1,7 +1,16 @@
 /target
+/release
+/wechat-minigame
+/game-package
+/executor-android/assets
+/game_rocky/
+/data_rocky/
 *.log
 /McpTemp
 /screenshot
 /tools
 data/editor/mcp-bridge.exe
 Docs/
+game_rocky/
+data_rocky/
+third_party/

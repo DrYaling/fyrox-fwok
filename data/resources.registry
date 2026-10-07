@@ -1,15 +1,14 @@
 {
     "161a96ca-223d-4808-8f10-09222b59ab6e": "data/SimHei.ttf",
     "268cf3e3-1eae-4152-9b9f-c32f692279ed": "data/scripts/modules/ui_shared.lua",
+    "785a2882-2b36-41c4-8a4d-e472ef44a9c5": "data/scripts/lua_benchmark.lua",
     "86f25ac2-7ac2-45d6-a73e-710d5dd404b0": "data/NotoSansSC[wght].ttf",
     "a02841fd-e57b-4ad9-9069-80f950046e26": "data/scripts/modules/lua_import_test.lua",
     "a12591ea-fefa-4662-a3be-dea0294ece56": "data/scripts/modules/ui_components.lua",
+    "aad06cc9-e66b-4a76-8ec1-5671016a166d": "data/scripts/lua_stress.lua",
     "acd320ba-b762-4edc-bb8c-bbf5a181e207": "data/scene.rgs",
     "c3383569-1c63-4534-bbfe-fe4042c8d233": "data/unnamed.ui",
-    "cbbc0844-2439-407f-bcc1-d1f865bca9e1": "data/scripts/ui_controller.lua",
     "cd98ce7e-36a0-4f67-8afd-5dba4c14c421": "data/rpg_level.rgs",
     "ce1c57dd-80b6-4d3e-b905-189b207e7439": "data/mcp_camera_ui_test.ui",
-    "eb026ae2-5b45-423d-9204-86035e8d0db0": "data/scripts/battle_controller.lua",
-    "eeb72397-a7e5-41f9-8c4e-6646aa2fea25": "data/scripts/player.lua",
-    "f7c7fb1a-7f4f-4168-9d5e-9a294be139bd": "data/scripts/main.lua",
+    "f7c7fb1a-7f4f-4168-9d5e-9a294be139bd": "data/scripts/main.lua"
 }

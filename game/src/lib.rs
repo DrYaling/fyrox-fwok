@@ -1,10 +1,10 @@
 //! FWOK runtime host. Gameplay and UI behavior are owned by Lua scripts.
 use fyrox::{
-    core::{algebra::Vector3, pool::Handle, reflect::prelude::*, visitor::prelude::*, warn},
+    core::{pool::Handle, reflect::prelude::*, visitor::prelude::*, warn},
     event::{ElementState, Event, WindowEvent},
     graph::SceneGraph,
     gui::{
-        button::ButtonMessage,
+        button::{Button, ButtonMessage},
         message::{MessageDirection, UiMessage},
         UserInterface,
     },
@@ -15,21 +15,29 @@ use fyrox::{
     },
     scene::Scene,
 };
-use lua_plugin::{
-    register_fyrox_resources, Bridge, BridgeHandle, LuaConfig, LuaPluginHost, SceneRegistry,
-    UiRegistry,
-};
-use lua_plugin::{SceneCommand, UiCommand};
-use std::{
-    cell::RefCell,
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+use lua_plugin::{register_fyrox_resources, LuaConfig, LuaPluginHost};
+use std::path::{Path, PathBuf};
+#[cfg(target_arch = "wasm32")]
+use std::rc::Rc;
+
+#[cfg(target_arch = "wasm32")]
+fn wasm_lua_source_loader(path: &Path) -> mlua::Result<String> {
+    let key = path.to_string_lossy().replace('\\', "/");
+    fyrox::core::log::Log::info(format!("[Lua] WASM source request: {key}"));
+    let source = match key.as_str() {
+        "data/scripts/main.lua" => include_str!("../../data/scripts/main.lua"),
+        _ => {
+            return Err(mlua::Error::external(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Lua source is not in the game package: {key}"),
+            )))
+        }
+    };
+    Ok(source.to_owned())
+}
 
 mod settings;
 pub use settings::GameSettings;
-
-const MAX_PENDING_UI_COMMANDS: usize = 20_000;
 
 #[derive(Default, Debug, Visit, Reflect)]
 #[reflect(type_uuid = "4b7e0f75-4f32-4c02-a58d-3ec89a3a7d11", non_cloneable)]
@@ -38,12 +46,6 @@ pub struct Game {
     #[visit(skip)]
     #[reflect(hidden)]
     ui_handle: Handle<UserInterface>,
-    #[visit(skip)]
-    #[reflect(hidden)]
-    ui_registry: Option<UiRegistry>,
-    #[visit(skip)]
-    #[reflect(hidden)]
-    scene_registry: Option<SceneRegistry>,
     #[visit(skip)]
     #[reflect(hidden)]
     skip_game_font: bool,
@@ -61,26 +63,29 @@ pub struct Game {
     lua_host: Option<LuaPluginHost>,
     #[visit(skip)]
     #[reflect(hidden)]
-    bridge: BridgeHandle,
-    #[visit(skip)]
-    #[reflect(hidden)]
     lua_update_ticks: u64,
     #[visit(skip)]
     #[reflect(hidden)]
     ui_diagnostic_logged: bool,
     #[visit(skip)]
     #[reflect(hidden)]
-    pending_ui_commands: Vec<UiCommand>,
-    #[visit(skip)]
-    #[reflect(hidden)]
-    ui_visible: bool,
-    #[visit(skip)]
-    #[reflect(hidden)]
-    ui_loading: bool,
+    smoke_ui_click_sent: bool,
     #[visit(skip)]
     #[reflect(hidden)]
     #[cfg(feature = "lua-benchmark")]
     benchmark_autostart_sent: bool,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    #[cfg(feature = "lua-benchmark")]
+    benchmark_memory_samples: u32,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    #[cfg(feature = "lua-benchmark")]
+    stress_started: bool,
+    #[visit(skip)]
+    #[reflect(hidden)]
+    #[cfg(feature = "lua-benchmark")]
+    stress_ticks: u64,
 }
 
 impl PartialEq for Game {
@@ -116,8 +121,16 @@ impl Plugin for Game {
                 );
             }
         }
-        let mut config = LuaConfig::load("data/fyrox-lua.toml")
-            .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+        let mut config = match load_lua_config() {
+            Ok(config) => config,
+            Err(error) => {
+                warn!("[Lua] configuration error; runtime disabled: {}", error);
+                LuaConfig {
+                    enabled: false,
+                    ..LuaConfig::default()
+                }
+            }
+        };
         if config.script_root.as_os_str().is_empty() {
             config.script_root = PathBuf::from("data/scripts");
         }
@@ -167,11 +180,14 @@ impl Plugin for Game {
             }
         }
 
-        self.apply_ui_commands(context);
-
-        if let Some(host) = self.lua_host.as_mut() {
-            host.update(dt)
-                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+        let ui_load_requests = if let Some(host) = self.lua_host.as_mut() {
+            let requests = match host.update_with_context(context, dt) {
+                Ok(requests) => requests,
+                Err(error) => {
+                    warn!("[Lua] update host error recovered: {}", error);
+                    Vec::new()
+                }
+            };
             self.lua_update_ticks += 1;
             if self.lua_update_ticks == 1 || self.lua_update_ticks % 300 == 0 {
                 // warn!(
@@ -180,30 +196,154 @@ impl Plugin for Game {
                 //     runtime.script_count()
                 // );
             }
+            requests
+        } else {
+            Vec::new()
+        };
+        self.ui_handle = self
+            .lua_host
+            .as_ref()
+            .map(LuaPluginHost::ui_handle)
+            .unwrap_or(Handle::NONE);
+        self.schedule_ui_loads(context, ui_load_requests);
+        if !self.smoke_ui_click_sent {
+            if let Ok(target) = std::env::var("FWOK_TEST_UI_CLICK") {
+                if let Ok(ui) = context.user_interfaces.try_get_mut(self.ui_handle) {
+                    if let Some((button, node)) = ui.find_by_name_from_root(&target) {
+                        if node.cast::<Button>().is_some() {
+                            ui.send_message(UiMessage::from_widget(button, ButtonMessage::Click));
+                            self.smoke_ui_click_sent = true;
+                            warn!("[UI] smoke click injected for serialized button: {target}");
+                        }
+                    }
+                }
+            }
         }
-        self.apply_scene_commands(context);
         #[cfg(feature = "lua-benchmark")]
         {
+            if std::env::var_os("FWOK_MEMORY_AUDIT").is_some() && self.lua_update_ticks % 30 == 0 {
+                if let Some(host) = self.lua_host.as_ref() {
+                    if let Some(runtime) = host.runtime() {
+                        let before = runtime.lua.used_memory();
+                        let gc_before = runtime.lua.used_memory();
+                        let gc_started = std::time::Instant::now();
+                        let gc_result = runtime.lua.gc_collect();
+                        let gc_ms = gc_started.elapsed().as_secs_f64() * 1000.0;
+                        let after = runtime.lua.used_memory();
+                        let stats = host.bridge_stats();
+                        self.benchmark_memory_samples += 1;
+                        warn!(
+                            "[LuaMemory] sample={} tick={} used_before={} gc_before={} used_after={} reclaimed={} gc_ms={:.3} gc_ok={} loaded_scripts={} component_scripts={} bridge_queued={} bridge_applied={} bridge_dropped={}",
+                            self.benchmark_memory_samples,
+                            self.lua_update_ticks,
+                            before,
+                            gc_before,
+                            after,
+                            gc_before.saturating_sub(after),
+                            gc_ms,
+                            gc_result.is_ok(),
+                            runtime.loaded_script_count(),
+                            runtime.script_count(),
+                            stats.queued_commands,
+                            stats.applied_commands,
+                            stats.dropped_commands,
+                        );
+                    }
+                }
+            }
             if self.ui_diagnostic_logged
                 && !self.benchmark_autostart_sent
                 && self.lua_update_ticks >= 10
-                && std::env::var_os("FWOK_BENCHMARK_AUTOSTART").is_some()
+                && std::env::var("FWOK_BENCHMARK_AUTOSTART").ok().as_deref() == Some("1")
             {
-                let ui = context
-                    .user_interfaces
-                    .try_get_mut(self.ui_handle)
-                    .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
-                let (button, _) = ui
-                    .find_by_name_from_root("lua_benchmark_button")
-                    .ok_or_else(|| {
-                        fyrox::plugin::error::GameError::str("benchmark resource button missing")
-                    })?;
-                ui.send_message(UiMessage::from_widget(button, ButtonMessage::Click));
-                self.benchmark_autostart_sent = true;
-                warn!("[Benchmark] injected real UI message for serialized button (automated event, not physical pointer)");
+                if let Ok(ui) = context.user_interfaces.try_get_mut(self.ui_handle) {
+                    if let Some((button, _)) = ui.find_by_name_from_root("lua_benchmark_button") {
+                        ui.send_message(UiMessage::from_widget(button, ButtonMessage::Click));
+                        self.benchmark_autostart_sent = true;
+                        warn!("[Benchmark] injected real UI message for serialized button (automated event, not physical pointer)");
+                    } else {
+                        if let Some(host) = self.lua_host.as_mut() {
+                            if let Some(runtime) = host.runtime_mut() {
+                                match runtime
+                                    .lua
+                                    .load(include_str!("../../data/scripts/lua_benchmark.lua"))
+                                    .into_function()
+                                    .and_then(|function| function.call::<()>(()))
+                                {
+                                    Ok(()) => {}
+                                    Err(error) => {
+                                        warn!(
+                                            "[Benchmark] Lua benchmark error recovered: {}",
+                                            error
+                                        );
+                                    }
+                                }
+                                self.benchmark_autostart_sent = true;
+                                warn!("[Benchmark] executed live Lua benchmark script");
+                            }
+                        }
+                    }
+                }
             }
-            if self.benchmark_autostart_sent && self.lua_update_ticks >= 120 {
+            if self.benchmark_autostart_sent
+                && self.lua_update_ticks >= 120
+                && std::env::var_os("FWOK_BENCHMARK_NO_EXIT").is_none()
+            {
                 context.loop_controller.exit();
+            }
+            if std::env::var("FWOK_STRESS_AUTOSTART").ok().as_deref() == Some("1") {
+                if !self.stress_started {
+                    if let Some(host) = self.lua_host.as_mut() {
+                        if let Some(runtime) = host.runtime_mut() {
+                            let batch =
+                                std::env::var("FWOK_STRESS_BATCH").ok().as_deref() == Some("1");
+                            let _ = runtime.lua.globals().set("__fwok_stress_batch", batch);
+                            let result = runtime
+                                .lua
+                                .load(include_str!("../../data/scripts/lua_stress.lua"))
+                                .set_name("@lua-plugin/stress")
+                                .exec();
+                            match result {
+                                Ok(()) => {
+                                    self.stress_started = true;
+                                    warn!("[LuaStress] started");
+                                }
+                                Err(error) => warn!("[LuaStress] setup error recovered: {}", error),
+                            }
+                        }
+                    }
+                }
+                if self.stress_started {
+                    self.stress_ticks += 1;
+                    let stress_tick = self.stress_ticks;
+                    if let Some(host) = self.lua_host.as_mut() {
+                        let stats_snapshot = if stress_tick % 300 == 0 {
+                            Some(host.bridge_stats())
+                        } else {
+                            None
+                        };
+                        if let Some(runtime) = host.runtime_mut() {
+                            let tick: Result<mlua::Function, _> =
+                                runtime.lua.globals().get("__fwok_stress_tick");
+                            if let Ok(tick) = tick {
+                                if let Err(error) = tick.call::<()>(200u32) {
+                                    warn!("[LuaStress] tick error recovered: {}", error);
+                                }
+                            }
+                            if let Ok(event) = runtime
+                                .lua
+                                .globals()
+                                .get::<mlua::Function>("__fwok_stress_event")
+                            {
+                                let _ = event.call::<()>(("frame", self.stress_ticks.to_string()));
+                            }
+                            if let Some(stats) = stats_snapshot {
+                                let used = runtime.lua.used_memory();
+                                warn!("[LuaStress] tick={} lua_heap={} queued={} applied={} dropped={} apply_ns={}", stress_tick, used, stats.queued_commands, stats.applied_commands, stats.dropped_commands, stats.apply_duration_ns);
+                            }
+                        }
+                    }
+                }
             }
         }
         Ok(())
@@ -221,16 +361,19 @@ impl Plugin for Game {
         if ui_handle != self.ui_handle {
             return Ok(());
         }
-        let Some(_registry) = self.ui_registry.as_ref() else {
-            return Ok(());
-        };
         if let Some(ButtonMessage::Click) = message.data() {
-            let id = _registry.button_id(message.destination());
+            let id = self
+                .lua_host
+                .as_ref()
+                .and_then(LuaPluginHost::ui_registry)
+                .and_then(|registry| registry.button_id(message.destination()))
+                .map(str::to_owned);
             if let Some(id) = id {
                 warn!("[Lua] UI click routed: id={}", id);
                 if let Some(host) = self.lua_host.as_mut() {
-                    host.dispatch_ui_click(id)
-                        .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+                    if let Err(error) = host.dispatch_ui_click(&id) {
+                        warn!("[Lua] UI click error recovered: {}", error);
+                    }
                 }
             }
         }
@@ -239,8 +382,9 @@ impl Plugin for Game {
 
     fn on_deinit(&mut self, _context: PluginContext) -> GameResult {
         if let Some(host) = self.lua_host.as_mut() {
-            host.destroy()
-                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+            if let Err(error) = host.destroy() {
+                warn!("[Lua] destroy error recovered: {}", error);
+            }
         }
         self.lua_host = None;
         Ok(())
@@ -274,10 +418,22 @@ impl Plugin for Game {
             } else {
                 "released"
             };
-            host.dispatch_event("input.key", &format!("{key_name}:{state}"))
-                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+            if let Err(error) = host.dispatch_event("input.key", &format!("{key_name}:{state}")) {
+                warn!("[Lua] input event error recovered: {}", error);
+            }
         }
         Ok(())
+    }
+}
+
+fn load_lua_config() -> Result<LuaConfig, Box<dyn std::error::Error>> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        return Ok(toml::from_str(include_str!("../../data/fyrox-lua.toml"))?);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        LuaConfig::load("data/fyrox-lua.toml")
     }
 }
 
@@ -291,7 +447,6 @@ impl Game {
 
     fn initialize_scene(&mut self, scene: Scene, context: &mut PluginContext) -> GameResult {
         self.scene = context.scenes.add(scene);
-        self.scene_registry = Some(SceneRegistry::default());
         self.scene_ready = true;
         self.try_start_runtime(context)
     }
@@ -300,26 +455,29 @@ impl Game {
         if !self.scene_ready || self.lua_host.is_some() || self.startup_config.is_none() {
             return Ok(());
         }
-        let config = self.startup_config.take().unwrap();
-        let bridge = Rc::new(RefCell::new(Bridge {
-            ui_text: Default::default(),
-            commands: Vec::new(),
-            scene_commands: Vec::new(),
-        }));
-        self.bridge = BridgeHandle(bridge.clone());
+        let Some(config) = self.startup_config.take() else {
+            return Ok(());
+        };
         if config.enabled {
             warn!("[Lua] creating project script runtime");
             let mut host = LuaPluginHost::new(config);
+            host.attach_scene(self.scene);
+            // The host owns the bridge consumed by the command host. Pass that
+            // exact bridge into Lua so queued UI/Scene mutations are applied.
+            #[cfg(target_arch = "wasm32")]
+            host.set_source_loader(Rc::new(wasm_lua_source_loader));
             let scene = context
                 .scenes
                 .try_get(self.scene)
                 .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
             let loaded = host
                 .start_scene(scene, Path::new("scene"))
-                .map_err(|e| fyrox::plugin::error::GameError::str(e.to_string()))?;
+                .unwrap_or_else(|error| {
+                    warn!("[Lua] scene runtime startup error recovered: {}", error);
+                    0
+                });
             warn!("[Lua] scene Lua scripts instantiated: {}", loaded);
             if host.runtime().is_some() {
-                self.bridge = host.bridge().clone();
                 self.lua_host = Some(host);
             } else {
                 warn!("[Lua] main.lua is missing; runtime remains disabled");
@@ -328,43 +486,21 @@ impl Game {
         } else {
             self.lua_host = None;
         }
-        self.apply_scene_commands(context);
         Ok(())
     }
 
-    fn apply_ui_commands(&mut self, context: &mut PluginContext) {
-        let commands = self
-            .bridge
-            .0
-            .try_borrow_mut()
-            .ok()
-            .map(|mut bridge| std::mem::take(&mut bridge.commands))
-            .unwrap_or_default();
-        let mut ordered = std::mem::take(&mut self.pending_ui_commands);
-        ordered.extend(commands);
-
-        let mut deferred = Vec::new();
-        for command in ordered {
-            match command {
-                UiCommand::Load(path) => {
-                    if self.ui_handle.is_some() || self.ui_loading {
-                        warn!(
-                            "[Lua] ui.load ignored because a UI is already loaded or loading: {}",
-                            path
-                        );
-                        continue;
-                    }
-                    self.ui_loading = true;
-                    let path_for_log = path.clone();
-                    context.load_ui(path, move |result, game: &mut Game, ctx| {
-                        game.ui_loading = false;
-                        let mut ui = result?.payload;
-                        if let Some(font) = game.ui_font.as_ref() {
-                            ui.default_font = font.clone();
-                        }
-                        game.ui_handle = ctx.user_interfaces.add(ui);
-                        game.ui_registry = Some(UiRegistry::default());
-                        if !game.ui_visible {
+    fn schedule_ui_loads(&mut self, context: &mut PluginContext, requests: Vec<String>) {
+        for path in requests {
+            let path_for_log = path.clone();
+            context.load_ui(path, move |result, game: &mut Game, ctx| {
+                let Some(host) = game.lua_host.as_mut() else {
+                    return Ok(());
+                };
+                match result {
+                    Ok(result) => {
+                        host.complete_ui_load(result.payload, ctx, game.ui_font.as_ref());
+                        game.ui_handle = host.ui_handle();
+                        if !host.ui_visible() {
                             if let Ok(ui) = ctx.user_interfaces.try_get_mut(game.ui_handle) {
                                 ui.send(
                                     ui.root(),
@@ -373,136 +509,17 @@ impl Game {
                             }
                         }
                         warn!("[Lua] UI resource loaded by ui.load: {}", path_for_log);
-                        Ok(())
-                    });
-                }
-                UiCommand::Show(visible) => {
-                    self.ui_visible = visible;
-                    if let Ok(ui) = context.user_interfaces.try_get_mut(self.ui_handle) {
-                        ui.send(
-                            ui.root(),
-                            fyrox::gui::widget::WidgetMessage::Visibility(visible),
-                        );
                     }
-                }
-                command => deferred.push(command),
-            }
-        }
-
-        if let (Some(registry), Ok(ui)) = (
-            self.ui_registry.as_mut(),
-            context.user_interfaces.try_get_mut(self.ui_handle),
-        ) {
-            if let Ok(mut bridge) = self.bridge.0.try_borrow_mut() {
-                registry.sync_text_values(ui, &mut bridge.ui_text);
-            }
-            for command in deferred {
-                registry.apply(ui, command);
-            }
-        } else {
-            let available = MAX_PENDING_UI_COMMANDS.saturating_sub(self.pending_ui_commands.len());
-            let dropped = deferred.len().saturating_sub(available);
-            self.pending_ui_commands
-                .extend(deferred.into_iter().take(available));
-            if dropped > 0 && (self.lua_update_ticks == 0 || self.lua_update_ticks % 300 == 0) {
-                warn!("[Lua] dropped {dropped} UI command(s) while waiting for UI to load");
-            }
-        }
-    }
-
-    fn apply_scene_commands(&mut self, context: &mut PluginContext) {
-        let commands = self
-            .bridge
-            .0
-            .try_borrow_mut()
-            .ok()
-            .map(|mut bridge| std::mem::take(&mut bridge.scene_commands));
-        let Some(commands) = commands else { return };
-        let Ok(scene) = context.scenes.try_get_mut(self.scene) else {
-            return;
-        };
-        let Some(registry) = self.scene_registry.as_mut() else {
-            return;
-        };
-        for command in commands {
-            match command {
-                SceneCommand::Resolve(target) => {
-                    if registry
-                        .resolve_scoped(
-                            scene,
-                            target.scope.map(|token| token.to_handle()),
-                            &target.name,
-                        )
-                        .is_some()
-                    {
+                    Err(error) => {
+                        host.fail_ui_load();
                         warn!(
-                            "[Lua] scene.find resolved existing node: scope={:?}, name={}",
-                            target.scope, target.name
-                        );
-                    } else {
-                        warn!(
-                            "[Lua] scene.find could not resolve existing node: scope={:?}, name={}",
-                            target.scope, target.name
+                            "[Lua] UI resource load failed for {}: {}",
+                            path_for_log, error
                         );
                     }
                 }
-                SceneCommand::SetPosition(target, x, y, z) => {
-                    if let Some(handle) = registry.resolve_scoped(
-                        scene,
-                        target.scope.map(|token| token.to_handle()),
-                        &target.name,
-                    ) {
-                        if let Ok(node) = scene.graph.try_get_mut(handle) {
-                            node.local_transform_mut()
-                                .set_position(Vector3::new(x, y, z));
-                        }
-                    }
-                }
-                SceneCommand::SetRotationZ(target, angle) => {
-                    if let Some(handle) = registry.resolve_scoped(
-                        scene,
-                        target.scope.map(|token| token.to_handle()),
-                        &target.name,
-                    ) {
-                        if let Ok(node) = scene.graph.try_get_mut(handle) {
-                            node.set_rotation_z(angle);
-                        }
-                    }
-                }
-                SceneCommand::SetRotationAngles(target, roll, pitch, yaw) => {
-                    if let Some(handle) = registry.resolve_scoped(
-                        scene,
-                        target.scope.map(|token| token.to_handle()),
-                        &target.name,
-                    ) {
-                        if let Ok(node) = scene.graph.try_get_mut(handle) {
-                            node.set_rotation_angles(roll, pitch, yaw);
-                        }
-                    }
-                }
-                SceneCommand::SetScale(target, x, y, z) => {
-                    if let Some(handle) = registry.resolve_scoped(
-                        scene,
-                        target.scope.map(|token| token.to_handle()),
-                        &target.name,
-                    ) {
-                        if let Ok(node) = scene.graph.try_get_mut(handle) {
-                            node.set_scale_xyz(x, y, z);
-                        }
-                    }
-                }
-                SceneCommand::SetEnabled(target, enabled) => {
-                    if let Some(handle) = registry.resolve_scoped(
-                        scene,
-                        target.scope.map(|token| token.to_handle()),
-                        &target.name,
-                    ) {
-                        if let Ok(node) = scene.graph.try_get_mut(handle) {
-                            node.set_enabled(enabled);
-                        }
-                    }
-                }
-            }
+                Ok(())
+            });
         }
     }
 }

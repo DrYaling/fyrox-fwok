@@ -1,5 +1,4 @@
--- Project entry point. Only LuaComponent instances are placed in self.scripts;
--- other files under data/scripts are loaded only when Lua code explicitly requires them.
+-- Project entry point for the Lua runtime and UI capability experiments.
 local Main = {}
 Main.__index = Main
 
@@ -11,6 +10,9 @@ function Main:on_awake()
     log.info("main.on_awake")
     ui.load("data/unnamed.ui")
     ui.show(true)
+    ui.button("inventory_button"):on_click(function()
+        log.info("[LuaSmoke] inventory_button callback")
+    end)
     log.info("[main.lua] ui.load(data/unnamed.ui) and ui.show(true) queued")
 end
 

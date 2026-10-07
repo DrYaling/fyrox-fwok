@@ -1,0 +1,16 @@
+[package]
+name = "executor-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fyrox.workspace = true
+fwok-game = { path = "../game", default-features = false }
+lua-plugin = { workspace = true, default-features = false, features = ["lua54"] }
+wasm-bindgen = "0.2"
+
+[build-dependencies]
+cc = "1.2"
